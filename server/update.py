@@ -1,5 +1,5 @@
-from settings import get_md5, log, Level
-import settings
+from server import settings
+from server.settings import get_md5, log, Level
 
 
 def update_init():

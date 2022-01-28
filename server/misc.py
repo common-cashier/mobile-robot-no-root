@@ -1,4 +1,7 @@
+# -*- coding: utf-8 -*-
 
+# This is also OK
+# coding:utf-8
 import json
 import random
 import re
@@ -8,19 +11,23 @@ import requests
 import logging as logger
 
 from aes import encrypt, decrypt
-from settings import api, log, sms_bank, Level, serial_no
+from server import settings
+from server.settings import api, log, sms_bank, Level
 
 
+# 公共get方法
 def get(url):
     logger.info("req %s", url)
     begin = t.time()
     rsp = requests.get(url)
-    log("rsp from %s, status=%s, text=%s, cost %s seconds" % (url, rsp.status_code, rsp.text, t.time() - begin), Level.RES_WATER_DROP)
+    log("rsp from %s, status=%s, text=%s, cost %s seconds" % (url, rsp.status_code, rsp.text, t.time() - begin),
+        Level.RES_WATER_DROP)
     return rsp.ok and rsp.json() or None
 
 
+# 公共post方法
 def post(url, payload, with_common=False):
-    payload.update({"serialNo": "".join(serial_no)})
+    payload.update({"serialNo": "".join(settings.serial_no)})
     if with_common:
         payload.update(common_data())
     log("req %s, params=%s" % (url, payload), Level.REQ_WATER_DROP)
@@ -28,27 +35,31 @@ def post(url, payload, with_common=False):
     params = encrypt_data(payload)
     log("encrypt_data: %s" % params, Level.REQ_WATER_DROP)
     rsp = requests.post(url, json=params)
-    log("rsp from %s, status=%s, text=%s, cost %s seconds" % (url, rsp.status_code, rsp.text, t.time() - begin), Level.RES_WATER_DROP)
+    log("rsp from %s, status=%s, text=%s, cost %s seconds" % (url, rsp.status_code, rsp.text, t.time() - begin),
+        Level.RES_WATER_DROP)
     if rsp:
         rsp = decrypt(rsp, api["key"], api["iv"])
     log("rsp from %s, text=%s, cost %s seconds" % (url, rsp, t.time() - begin), Level.RES_WATER_DROP)
     return rsp and json.loads(rsp) or None
 
 
+# 公共添加格式化data
 def common_data():
     return {"nonce": "".join(random.sample(string.ascii_letters + string.digits, 10)), "timestamp": int(t.time())}
 
 
+# 解码数据
 def encrypt_data(payload):
     return {"requestData": encrypt(payload, api["key"], api["iv"])}
 
 
+# 解析sms短信
 def parse_sms(sms_msg, bank):
     if re.findall(sms_bank[bank.upper()], sms_msg):
         if '交易码' in sms_msg:
             return re.findall(r'交易码(\d{6})', sms_msg)[0]
         elif '验证码' in sms_msg:
-            return re.findall(r'验证码(\d{6})', sms_msg)[0]
+            return re.findall(r'验证码[：:]?(\d{6})', sms_msg)[0]
         else:
             return 1
     else:
@@ -57,8 +68,7 @@ def parse_sms(sms_msg, bank):
 
 if __name__ == "__main__":
     rsp = post("https://uatbotapi.drippay.net/pc/transfer",
-         {'accountAlias': '中国银行-LTT(李婷婷)-1535'})
+               {'accountAlias': '中国银行-LTT(李婷婷)-1535'})
     print(rsp['data'])
     print(type(rsp['data']))
     print(rsp['data'] is None)
-

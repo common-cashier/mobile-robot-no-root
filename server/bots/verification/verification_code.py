@@ -1,13 +1,16 @@
+# coding: utf-8
 import re  # 用于正则
+import time
+
 from PIL import Image  # 用于打开图片和对图片处理
 import pytesseract  # 用于图片转文字
-import time
+
+from server.ocr_api import ocr_img
+
 Image.LOAD_TRUNCATED_IMAGES = True
-import sys
-sys.path.append('../..')
-from ocr_api import ocr_img
 
 
+# 图片识别类
 class VerificationCode:
     def __init__(self, x=None, y=None, width=None, height=None, img=None, bank=None, letters_len=None):
         self.x = x
@@ -18,6 +21,7 @@ class VerificationCode:
         self.bank = bank
         self.letters_len = letters_len
 
+    # 拿到图片内容
     def get_pictures(self):
         page_snap_obj = Image.open(self.img)
         time.sleep(1)
@@ -28,20 +32,24 @@ class VerificationCode:
         image_obj = page_snap_obj.crop((left, top, right, bottom))  # 按照验证码的长宽，切割验证码
         return image_obj
 
+    # 把图片过程化
     def processing_image(self):
         image_obj = self.get_pictures()  # 获取验证码
         img = image_obj.convert("L")  # 转灰度
         Bigdata = img.load()
         w, h = img.size
         threshold = 120
+        # 遍历所有像素，大于阈值的为黑色
         for y in range(h):
             for x in range(w):
                 if Bigdata[x, y] < threshold:
                     Bigdata[x, y] = 0
                 else:
                     Bigdata[x, y] = 255
+        # img.show()
         return img
 
+    # 删除噪点
     def delete_spot(self):
         images = self.processing_image()
         data = images.getdata()
@@ -55,6 +63,7 @@ class VerificationCode:
                     left_pixel = data[w * y + (x - 1)]
                     down_pixel = data[w * (y + 1) + x]
                     right_pixel = data[w * y + (x + 1)]
+                    # 判断上下左右的黑色像素点总个数
                     if top_pixel < 10:
                         black_point += 1
                     if left_pixel < 10:
@@ -68,11 +77,13 @@ class VerificationCode:
                     black_point = 0
         return images
 
+    # 图片转文字
     def image_str(self, deluxe=False):
 
         image = self.delete_spot()
         image.save(self.img)
 
+        # 是否使用腾讯OCR
         if deluxe:
             try:
                 res = ocr_img(self.img, self.letters_len)

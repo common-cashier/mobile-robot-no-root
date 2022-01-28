@@ -1,3 +1,4 @@
+import sys
 import time
 from typing import NoReturn, List
 
@@ -140,7 +141,7 @@ def input_sms(params: WorkFlowParams) -> NoReturn:
 
 
 # 停止的回调方法
-def stop_callback():
+def stop_callback() -> NoReturn:
     print('stop callback function')
     params = {
         "account_alias": settings.bot.account.alias,

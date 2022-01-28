@@ -1,24 +1,38 @@
-import json
-import os
+# coding: utf-8
+import sys
 from builtins import ConnectionRefusedError
 
-from flask import Flask, request
-import settings
-from update import update_init
-from settings import gateway, serial_no, log
-from obj_factory import bot_util
-import api
 import uiautomator2 as u2
-from bot_factory import BotFactory
+from flask import Flask, request
+
+# 添加上级目录，用于查找 server 包
+sys.path.append('..')
+
+from server import settings, api
+from server.update import update_init
+from server.settings import gateway, log
+from server.obj_factory import bot_util
+from server.bot_factory import BotFactory
 
 app = Flask(__name__)
 global rsp
+
+"""
+测试接口
+params：none
+"""
 
 
 @app.route('/', methods=['GET'])
 def hello():
     settings.ip()
     return "hello world"
+
+
+"""
+检查安装环境
+params：none
+"""
 
 
 @app.route('/check_evn', methods=['GET'])
@@ -36,6 +50,12 @@ def check():
         rsp = {'code': 1, 'msg': ext}
         log(rsp, settings.Level.SYSTEM)
     return rsp
+
+
+"""
+短信上报完成付款接口
+params：sms
+"""
 
 
 @app.route('/sms', methods=['POST'])
@@ -63,13 +83,25 @@ def sms():
                     print('/sms rsp: %s 需要先启动卡机' % ext)
                     return ext
             except Exception as ext:
-                ext = {'code': 1, 'msg': ext}
-                print('/sms rsp: %s 需要先启动卡机' % ext)
+                ext = {'code': 1, 'msg': repr(ext)}
+                print('/sms rsp: %s 需要先启动卡机' % repr(ext))
                 return ext
         except ConnectionRefusedError:
             ext = {'code': 1, 'msg': '服务未开启，请重新运行激活程序！'}
             log(ext, settings.Level.SYSTEM)
             return ext
+
+
+"""
+启动前置检查及信息获取
+params：
+baseURL 接口前缀
+serialNo 手机序列号
+kind 支付种类 
+bank 银行
+account_alias 银行别名
+devices_id 阿里控制ID
+"""
 
 
 @app.route('/start', methods=['POST'])
@@ -81,7 +113,7 @@ def start():
             params = request.get_json()
             log('/start req: %s' % params)
             settings.api['base'] = params['baseURL']
-            params['serialNo'] = settings.serial_no
+            settings.start_kind = params['kind']
             if hasattr(settings.rename_bank, params['bank']):
                 params['bank'] = settings.rename_bank[params['bank']]
             if params['kind'] == 0:
@@ -95,10 +127,18 @@ def start():
                     log("check_bank: %s" % res)
                     return res
             log("check_bank: is supported")
+            # 假数据
+            # data = {
+            #     "accountAlias": "中国银行-BOC(徐秀策)-4249）",
+            #     "loginName": "18648890160",
+            #     "loginPassword": "aa080706",
+            #     "paymentPassword": "080706",
+            #     "ukeyPassword": "080706",
+            #     "bank": "BOC"
+            # }
+            # data_obj = convert(data=data)
 
             bot_factory = BotFactory()
-            bot_util.cast_status = bot_factory.cast_status
-            bot_util.cast_last_transaction = bot_factory.cast_last_transaction
             bot_util.cast_transaction = bot_factory.cast_transaction
             bot_util.cast_start = bot_factory.cast_start
             bot_util.cast_sms = bot_factory.cast_sms
@@ -108,7 +148,6 @@ def start():
             if rsp['code'] == 0 and rsp['data'] is not None:
                 rsp['data']['kind'] = params['kind']
                 rsp['data']['devicesId'] = settings.serial_no
-                settings.account_data = rsp['data']
                 log("rsp['data']: %s" % rsp)
                 return {'code': 0, 'msg': '启动成功', 'data': rsp['data']}
             else:
@@ -117,10 +156,18 @@ def start():
             rsp = {'code': 1, 'msg': '服务未开启，请重新运行激活程序！'}
             log(rsp, settings.Level.SYSTEM)
         except Exception as ext:
-            rsp = {'code': 1, 'msg': ext}
+            rsp = {'code': 1, 'msg': repr(ext)}
             log(rsp, settings.Level.SYSTEM)
             return rsp
         return {'code': 0, 'msg': '启动成功', 'data': rsp}
+
+
+"""
+执行指定工作
+params：
+do_work: start 启动和操控App
+do_work: stop 关闭所有卡机应用
+"""
 
 
 @app.route('/do_work', methods=['POST'])
@@ -129,14 +176,19 @@ def do_work():
     if request.is_json:
         settings.ip()
         try:
+            if bot_util.cast_work is None or settings.bot is None or settings.bot.account is None:
+                return {'code': 1, 'msg': '请先启动卡机！'}
+
             params = request.get_json()
             log('/do_work req: %s' % params)
-            if params['do_work'] == "stop":
+            _work = params['do_work']
+            if _work == 'stop':
                 if params['extension'] is not None and params['extension'] != '':
                     settings.api['base'] = params['extension']
-                api.status(params['account_alias'], settings.Status.IDLE)
-            if bot_util.cast_work is None:
-                return {'code': 1, 'msg': '请先启动卡机！'}
+                api.status(params['account_alias'], settings.Status.PAUSE)
+            elif _work == 'start':
+                api.status(settings.bot.account.alias, settings.Status.RUNNING)
+
             bot_util.cast_work(params)
             rsp = {'code': 0, 'msg': '正在执行任务！'}
             log("do_work: %s" % params)
@@ -144,7 +196,7 @@ def do_work():
             rsp = {'code': 1, 'msg': '服务器异常，无法执行任务！'}
             log("{'code': 1, 'msg': '服务器异常，无法执行任务！'}", settings.Level.SYSTEM)
         except Exception as ext:
-            rsp = {'code': 1, 'msg': ext}
+            rsp = {'code': 1, 'msg': repr(ext)}
             log(rsp, settings.Level.SYSTEM)
         return rsp
 
