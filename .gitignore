@@ -163,10 +163,16 @@ crashlytics-build.properties
 fabric.properties
 
 __init__.py
-*/__init__.py
-*/*/__init__.py
+!server/__init__.py
+!server/*/__init__.py
+!server/*/*/__init__.py
+!server/*/*/*/__init__.py
 device_id.txt
 */verification.jpg
 *.jpg
 server/log/*.txt
 server/payment_record/*.jpg
+
+# screentshot
+server/receipt_record
+server/transfer_record
