@@ -49,8 +49,6 @@ class BotActionParameter:
     @staticmethod
     def get_query_receipt(**kwargs):
         """获取查询回单参数"""
-        # last_receipt: Receipt = kwargs.get('last_receipt')
-        # 最后一次转账信息，目前只抓取转账匹配的1条回单
         last_transferee: Transferee = kwargs.get('last_transferee')
         max_count: int = kwargs.get('max_query_count', 3)  # 默认查询 3 条
         return last_transferee, max_count

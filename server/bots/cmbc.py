@@ -22,7 +22,6 @@ _continuous_last_exec_time: Optional[datetime] = None  # 连续，上次执行�
 _sms_code = BotSmsCode()
 _wrapper = BotExecuteWrapper(lambda *_args, **_kwargs: break_callback(*_args, **_kwargs))
 
-# 初始化代理类，用于检测错误，暂不使用
 _d_proxy = None  # BotDeviceProxy()
 _act_config = None  # BotActivityConfig(d_proxy)
 _executors = [
@@ -33,7 +32,6 @@ _executors = [
     CMBCTransferIndexActivityExecutor('transfer_index', BotActivityType.TransferIndex, _act_config),
     CMBCTransferActivityExecutor('transfer', BotActivityType.Transfer, _act_config),
     CMBCReceiptIndexActivityExecutor('receipt', BotActivityType.QueryReceipt, _act_config),
-    # 已识别但无使用页面，用于快速响应页面切换，避免加载中 或 加载完成未识别 的混乱
     CMBCTransferResultActivityExecutor('transfer_result', BotActivityType.TransferResult, _act_config),
     CMBCReceiptDetailActivityExecutor('receipt_detail', BotActivityType.QueryReceiptDetail, _act_config),
     CMBCReceiptDetailImgActivityExecutor('receipt_detail_img', BotActivityType.QueryReceiptDetailImage, _act_config),
@@ -88,7 +86,6 @@ def transfer():
 @_wrapper.exec_wrap(name='查询流水', retry_limit=5)
 def transaction(last_trans: Transaction):
     """抓流水"""
-    # 缓存余额比较
     trans_list: List[Transaction] = _scheduler.execute(ActionType.QueryTransaction,
                                                        last_trans=last_trans,
                                                        max_query_count=30)
@@ -96,7 +93,6 @@ def transaction(last_trans: Transaction):
     account_result = _scheduler.execute(ActionType.QueryAccount)
     balance = account_result.get('balance', 0)
     common_log(f'余额: {balance}')
-    # 上报数据，金额已经转换为分
     report_type_transactions(_account.alias, balance, trans_list, is_fen_amount=True)
 
 
@@ -104,12 +100,10 @@ def transaction(last_trans: Transaction):
 def receipt():
     """抓回单"""
     last_transferee: Transferee = settings.transferee if settings.transferee else None
-    # 查询回单，查找上次转账匹配项，默认最多查2条
     receipt_list: List[Receipt] = _scheduler.execute(ActionType.QueryReceipt,
                                                      last_transferee=last_transferee,
                                                      max_query_count=2)
     common_log(f'回单列表: {receipt_list}')
-    # 上报数据，金额已经转换为分
     report_type_receipts(_account.alias, receipt_list, is_fen_amount=True)
 
 
@@ -150,58 +144,41 @@ def _reset():
     _continuous_last_exec_time = None
 
 
-# 执行具体工作流
 def do_work(workflow: settings.WorkFlow, params: WorkFlowParams = None):
     global _is_stopped, _continuous_last_exec_time, _break_res
-    # 启动可恢复运行，此处不检查终止操作
     if workflow != settings.WorkFlow.START:
-        # 如果有终止，无需继续处理。避免流程继续运行，直到检测 Break 彻底停止
         if _break_res is not None and _break_res.is_break and workflow != settings.WorkFlow.BREAK:
             common_log(f'执行 {workflow} ，检测到已终止 {_break_res.break_reason}')
             return
-        # 等待后再判断是否有停止操作
         _wait_moment(workflow)
         if _is_stopped:
             return
 
-    # 启动
     if workflow == settings.WorkFlow.START:
         _is_stopped = False
         _d.implicitly_wait(60)  # 60秒默认超时
         _reset()
         start(_d, _pkg_id)
-    # 停止
     elif workflow == settings.WorkFlow.STOP:
         _is_stopped = True
         stop(_d, _pkg_id)
-    # 检测起始页
     elif workflow == settings.WorkFlow.CHECK_HOME:
         return True
-    # 回到起始页
     elif workflow == settings.WorkFlow.GO_HOME:
-        # go_home()
         pass
-    # 检测登录态
     elif workflow == settings.WorkFlow.CHECK_LOGIN:
         return True
-    # 执行登录
     elif workflow == settings.WorkFlow.DO_LOGIN:
-        # do_login()
         pass
-    # 执行转账
     elif workflow == settings.WorkFlow.TRANSFER:
         transfer()
-    # 执行查询流水
     elif workflow == settings.WorkFlow.TRANSACTION:
         transaction(last_trans=params.last_transaction)
         _continuous_last_exec_time = datetime.now()
-    # 执行抓取回单
     elif workflow == settings.WorkFlow.RECEIPT:
         receipt()
-    # sms短信支付
     elif workflow == settings.WorkFlow.SMS:
         input_sms(code=params.filter_msg)
-    # 检查中断函数
     elif workflow == settings.WorkFlow.BREAK:
         return break_workflow()
     else:

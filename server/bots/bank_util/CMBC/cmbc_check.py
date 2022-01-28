@@ -22,20 +22,12 @@ class CMBCErrorChecker:
 
     @staticmethod
     def check(d: u2.Device, source=None, prior_func: Callable[[str], bool] = None) -> (bool, str):
-        """
-        检查错误
-        True 为有错误并已处理(外部需要重刷页面进行处理)
-        False 为无错误
-        Error 为自定义异常，外部拦截处理
-        """
-        # 更新版本
         x_update = d.xpath('//*[contains(@resource-id,"cn.com.cmbc.newmbank:id/text_tv")][contains(@text,"以后再说")]',
                            source)
         if x_update.exists:
             settings.log(f'检测到App更新提示')
             x_update.click()
             return True, '检测到App更新提示'
-        # 温馨提示
         x_error_msg = d.xpath('//*[@resource-id="cn.com.cmbc.newmbank:id/unify_dialog_message"]', source)
         if x_error_msg.exists:
             is_cancel = False
@@ -43,7 +35,6 @@ class CMBCErrorChecker:
                 error_msg = x_error_msg.get_text()
                 settings.log(f'检测到银行提示: {error_msg}')
 
-                # 如果前置函数已处理，则不做错误提示
                 if prior_func is not None and prior_func(error_msg):
                     return False, error_msg
 
@@ -63,21 +54,8 @@ class CMBCErrorChecker:
                     raise BotLogicRetryError(error_msg)  # 登录时无法识别是否已选中，只能通过提示后再次点击
                 if StrHelper.contains('确定要退出系统', error_msg):
                     is_cancel = True
-                """
-                密码不能小于6位，请核对后重新输入！
-                您需要阅读《中国民生银行隐私政策》后勾选同意。
-                登录失败，您的网络不稳定[001016]
-                您未签约手机银行，请点击自助注册按钮进行签约
-                用户名或密码错误，连续错误5次后锁定，已错误1次。
-                会话超时，请重新登录
-                通信超时,资金类交易请核对账户信息!
-                网络环境不稳定，请稍候重试。
-                您确定要退出系统吗?
-                """
-                # raise BotCategoryError(ErrorCategory.BankWarning, error_msg)
                 return True, error_msg
             finally:
-                # 关闭提示，取消 or 确定
                 if is_cancel:
                     d.xpath('//*[@resource-id="cn.com.cmbc.newmbank:id/unify_dialog_negative_btn"]', source) \
                         .click_exists(0.1)

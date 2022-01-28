@@ -1,7 +1,4 @@
-# -*- coding: utf-8 -*-
 
-# This is also OK
-# coding:utf-8
 import json
 import random
 import re
@@ -15,7 +12,6 @@ from server import settings
 from server.settings import api, log, sms_bank, Level
 
 
-# 公共get方法
 def get(url):
     logger.info("req %s", url)
     begin = t.time()
@@ -25,7 +21,6 @@ def get(url):
     return rsp.ok and rsp.json() or None
 
 
-# 公共post方法
 def post(url, payload, with_common=False):
     payload.update({"serialNo": "".join(settings.serial_no)})
     if with_common:
@@ -43,17 +38,14 @@ def post(url, payload, with_common=False):
     return rsp and json.loads(rsp) or None
 
 
-# 公共添加格式化data
 def common_data():
     return {"nonce": "".join(random.sample(string.ascii_letters + string.digits, 10)), "timestamp": int(t.time())}
 
 
-# 解码数据
 def encrypt_data(payload):
     return {"requestData": encrypt(payload, api["key"], api["iv"])}
 
 
-# 解析sms短信
 def parse_sms(sms_msg, bank):
     if re.findall(sms_bank[bank.upper()], sms_msg):
         if '交易码' in sms_msg:

@@ -19,10 +19,6 @@ class BotActionWatcher:
         pass
 
     def check(self, ctx: ActivityCheckContext) -> bool:
-        """
-        监听检查
-        :return: 是否检查到错误，需要外层重新检查
-        """
         pass
 
 
@@ -58,23 +54,13 @@ class BotActionScheduler:
         self._lock = threading.Lock()
 
     def execute(self, action_type: ActionType, *args, **kwargs):
-        """
-        执行目标 ActionType
-        根据当前运行 Activity 、目标 ActionType 的执行流程，识别需要回退或前进处理，如果不在已识别页面中，则调用`app返回`后再查找
-        :param action_type: 目标 Action
-        :param args: 动态参数，页面 execute 自解析
-        :param kwargs: 动态参数，页面 execute 自解析
-        :return: True 或 execute 结果值 表示执行成功, 否则执行失败
-        """
 
-        # self._log(f'准备执行 ActionType :{action_type}')
         self._lock.acquire(True)
         try:
             self._log(f'开始执行 {action_type}')
 
             executed, need_login = False, False
             execute_action_type = action_type  # 默认为需要执行 ActionType
-            # 执行 Action 重试次数，防止网络问题，导致页面无变化，一直重试
             retry_action_type, retry_limit, retry_count = None, 3, 0
             login_retry_limit = 2  # 登录重试次数
             force_refresh = True  # 执行流程时强制刷新页面
@@ -102,10 +88,8 @@ class BotActionScheduler:
 
                     if not need_login and not executed:
                         if execute_action_type == action_type:
-                            # 等于原目标 Action 时，使用参数
                             return executor.execute(ctx=ctx_execute, *args, **kwargs)
                         elif execute_action_type == ActionType.Login:
-                            # 目前仅有登录会阻碍原操作执行，登录不依赖动态参数
                             executor.execute(ctx=ctx_execute)
                             execute_action_type = action_type  # 执行过后，恢复原操作执行
                             self._log(f'登录后，还原目标操作继续执行: {action_type}')
@@ -118,7 +102,6 @@ class BotActionScheduler:
                     self._log(f'会话超时，待重新登录 {err.msg}')
                     need_login = True
                 except BotErrorBase as err:
-                    # 转账类不做重试
                     if BotErrorHelper.is_retryable(err) and execute_action_type != ActionType.Transfer:
                         continue  # 重试当前操作
                     else:
@@ -141,9 +124,7 @@ class BotActionScheduler:
         had_change_activity = False  # 流程是否触发过，保证页面不会使用缓存页
         loop_limit = 60  # 循环检查次数限制，避免流程过于复杂或递归调用，包含错误检查，页面回退、页面进入等
 
-        # 未检测到当前页面类型 返回再找直到限制，处于中间过渡页面时
         none_activity_limit, none_activity_counter = 5, 0
-        # 上次页面停留重试
         last_activity_type = None
         last_activity_counter_retry, last_activity_counter = 5, 0
 
@@ -158,7 +139,6 @@ class BotActionScheduler:
             if loop_limit < 0:
                 raise BotParseError('检查当前页面次数达到限制，疑似页面执行有互相依赖')
 
-            # 保证页面最新
             self._reset_ctx(ctx_check, ctx_execute)
 
             current_executor: BotActivityExecutor
@@ -177,23 +157,19 @@ class BotActionScheduler:
                 if _retry_t > 0:  # 有多次重试时，表示页面发生变化
                     self._reset_ctx(ctx_check, ctx_execute)
 
-            # 符合主页时，直接返回
             if action_type == ActionType.Default and current_executor.activity_type == BotActivityType.Main:
                 self._log('已回到首页')
                 target_executor = current_executor
                 break
-            # 登录操作时，有触发变更流程后，不是登录或主页时，表明已经登录，则免登录操作
             if action_type == ActionType.Login and had_change_activity \
                     and self._is_activity_non_login(current_executor.activity_type):
                 executed = True
                 break
-            # 非登录操作时，有触发变更流程后，仍在登录页，表明需要登录
             if action_type != ActionType.Login and had_change_activity \
                     and self._is_activity_login(current_executor.activity_type):
                 need_login = True
                 break
 
-            # 如果仍停留在当前页，则判断是否要重试
             if last_activity_type == current_executor.activity_type:
                 self._log(f'仍停留在页面: {last_activity_type}')
                 if last_activity_counter < last_activity_counter_retry:
@@ -206,25 +182,19 @@ class BotActionScheduler:
 
             curr_exec_name = current_executor.name
             self._log(f'当前页面执行类: {curr_exec_name}, {current_executor.__class__.__name__}')
-            # 不在流程内，则触发当前 Activity 返回，一直到符合执行流程的页面时 或 起始主页
             if curr_exec_name not in full_process:
                 current_executor.go_back(ctx=ctx_execute, target_type=BotActivityType.Default)
                 self._go_interval()
                 continue
 
-            # 在流程内，计算需要触发
             had_go_next = self._go_next(full_process, current_executor, ctx_execute)
             if had_go_next:
                 had_change_activity = True
                 self._go_interval()
             elif not had_change_activity and refresh:
-                # 如果无剩余流程时，未触发过一次Activity，则返回后再次触发(即刷新，避免页面缓存)
                 current_executor.go_back(ctx=ctx_execute, target_type=BotActivityType.Default)
-                # 触发返回时不认为已变更流程页面，可能页面有提示框或键盘时，触发返回仍停留当前页，需要多次触发返回才可以
-                # had_change_activity = True
                 self._go_interval()
             else:
-                # 如果无剩余流程时，已触发过一次Activity，则终止处理
                 target_executor = current_executor
                 break
 
@@ -267,11 +237,9 @@ class BotActionScheduler:
         if retry_time > 0:
             ctx_check.reset()  # 有重试时，需要重置上下文内容
 
-        # 监听检查，判断是否错误并处理
         if self.bot_config.watcher and self.bot_config.watcher.check(ctx_check):
             self.d.sleep(1)
             return False
-        # 轮询检查当前页面
         for executor in self.bot_config.activity_executors:
             if executor.check(ctx=ctx_check):
                 return executor
@@ -296,8 +264,6 @@ class BotActionScheduler:
         return not self._is_activity_login(activity_type)
 
     def _go_interval(self):
-        # self.d.sleep(1)
-        # self._log('间隔不停止')
         pass
 
     def _back_default(self):

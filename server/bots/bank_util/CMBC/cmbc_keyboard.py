@@ -16,11 +16,7 @@ def list_char_steps(chars: list, start, step):
 class KeyboardType(enum.IntEnum):
     LETTER_LOWER = 1,
     LETTER_UPPER = 2,
-    # LETTER = 3,  # letter_small + letter_upper
     DIGIT = 4,
-    # LETTER_DIGIT = 7,  # letter + digit
-    # SPECIAL = 8,
-    # ALL = 15,  # letter + digit + special
 
 
 class KeyType(enum.Enum):
@@ -32,15 +28,8 @@ class KeyType(enum.Enum):
 
 
 class KeyboardConfig:
-    """键盘配置
-    字符格式: 行、列 (字符，宽比)
-    字符配置: 字母、数字、符号、忽略
-    功能配置: 切换大小写、切换数字、切换字母
-    辅助功能键: 删除、关闭键盘
-    """
 
     def __init__(self, letters, numbers, width, height, start_y):
-        # 行 : 字符和宽比 数组
         self.letters = letters
         self.numbers = numbers
         self.width = width
@@ -48,7 +37,6 @@ class KeyboardConfig:
         self.start_y = start_y
 
     def find_pos(self, _char: str, height=None):
-        # 优先查找字符集，再找数字集
         all_configs = [self.letters, self.numbers]
         for chars_config in all_configs:
             if chars_config is None:
@@ -79,7 +67,6 @@ class CMBCLoginPwdKeyboard:
         if not x_keyboard.exists:
             raise BotParseError('未找到 键盘 节点')
 
-        # 行 : 字符和宽比 数组
         letters = {
             1: list_char_steps(['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'], 0.056, 0.099),
             2: list_char_steps(['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'], 0.1, 0.099),
@@ -104,28 +91,21 @@ class CMBCLoginPwdKeyboard:
 
     def _sleep_when_switch(self, seconds=None):
         pass  # 不需要等待，响应很快
-        # seconds = 0.01 if seconds is None else seconds
-        # self._d.sleep(seconds)
 
     def _switch_keyboard_type(self, target_type: KeyboardType):
         if self._current_type & target_type == target_type:
             return
 
-        # print('current:{}, target:{}'.format(self._current_type, target_type))
         while self._current_type & target_type != target_type:
             switched_type: Optional[KeyboardType] = None  # None is not switch
-            # 切换为字母
             if self._current_type & KeyboardType.DIGIT:
-                # 切换字母时，会自动还原为小写，由轮询再次切换为大写
                 if target_type == KeyboardType.LETTER_LOWER or target_type == KeyboardType.LETTER_UPPER:
                     self._click_char(KeyType.Letter.value)
                     switched_type = KeyboardType.LETTER_LOWER
-            # 切换为数字
             elif target_type & KeyboardType.DIGIT and (
                     self._current_type & KeyboardType.LETTER_LOWER or self._current_type & KeyboardType.LETTER_UPPER):
                 self._click_char(KeyType.Number.value)
                 switched_type = target_type
-            # 切换为字母大小写
             elif (target_type & KeyboardType.LETTER_LOWER or target_type & KeyboardType.LETTER_UPPER) and (
                     self._current_type & KeyboardType.LETTER_LOWER or self._current_type & KeyboardType.LETTER_UPPER):
                 self._click_char(KeyType.Capital.value)
@@ -140,10 +120,8 @@ class CMBCLoginPwdKeyboard:
                 raise BotRunningError('切换键盘类型失败')
 
     def _click_char(self, _char: str):
-        # 计算坐标位置，并点击
         pos_x, pos_y = self._kb_config.find_pos(_char.lower())  # 需统一转换为小写
         self._d.click(pos_x, pos_y)
-        # print(f'{_char} 坐标: {pos_x},{pos_y}')
 
     def input(self, text: str, interval: float = None):
         if text.islower():
@@ -161,8 +139,6 @@ class CMBCLoginPwdKeyboard:
             self._d.sleep(interval)
 
     def close(self):
-        # self._d.press('back')
-        # 关闭按钮在字母面板
         self._switch_keyboard_type(KeyboardType.LETTER_LOWER)
         self._click_char(KeyType.Close.value)
 
@@ -221,13 +197,11 @@ class CMBCTransferPwdKeyboard:
 
     def __init__(self, d: u2.Device, parent_path: str, source: str = None):
         self._d = d
-        # self._source = d.dump_hierarchy() if source is None else source
 
         x_keyboard = d.xpath(parent_path, source)
         if not x_keyboard.exists:
             raise BotParseError('未找到 键盘 节点')
 
-        # 行 : 字符和宽比 数组
         numbers = {
             1: list_char_steps(['1', '2', '3'], 0.17, 0.33),
             2: list_char_steps(['4', '5', '6'], 0.17, 0.33),
@@ -236,13 +210,10 @@ class CMBCTransferPwdKeyboard:
         }
         self._x, self._y, self._width, self._height = x_keyboard.get().rect
         self._kb_config = KeyboardConfig(None, numbers, self._width, self._height, self._y)
-        # self._keyboard_xpath = parent_path
 
     def _click_char(self, _char: str):
-        # 计算坐标位置，并点击
         pos_x, pos_y = self._kb_config.find_pos(_char.lower())  # 需统一转换为小写
         self._d.click(pos_x, pos_y)
-        # print(f'{_char} 坐标: {pos_x},{pos_y}')
 
     def input(self, text: str, interval: float = None):
         if not text.isdigit():

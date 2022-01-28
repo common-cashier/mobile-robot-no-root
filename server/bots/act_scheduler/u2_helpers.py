@@ -42,16 +42,13 @@ class DeviceHelper:
         had_move = False  # move once will be True
         max_move = win_height / float(2)  # center height
         while move_height > 0:
-            # print(f'swipe_up_until - remain: {move_height}')
             move = min(max_move, move_height)
             scale = move / float(max_move)
             if scale < 0.03:
-                # print(f'swipe_up_until - ignore swipe: {move}/{max_move}')
                 break
             else:
                 had_move = True
 
-            # list_ele.swipe('up', scale)
             d.swipe_ext('up', scale)
             move_height -= move
         return had_move
@@ -92,9 +89,7 @@ class DeviceHelper:
 
     @staticmethod
     def input_correct(d: u2.Device, _xpath: str, text: str, hierarchy_func=None, ignore_str=' '):
-        # 保证卡号输入正确，因之前有输入卡号时，再次输入时可能会清空失败，需要多次清空才生效
         retry_limit = 5
-        # 清空一次即可，避免h5中placeholder不能清除
         success, had_clear = False, False
         while retry_limit >= 0:
             retry_limit -= 1
@@ -108,14 +103,11 @@ class DeviceHelper:
                 success = True
                 break
             elif had_clear or exist_text == '':
-                # print(f'{datetime.now()} 输入文本')
                 x_input.set_text(text)
             else:
-                # print(f'[输入文本检查] 清空已输入文本: {exist_text}')
                 had_clear = True
                 x_input.click()
                 d.clear_text()
-            # 过快会导致 dump 卡住
             d.sleep(1)
         if not success:
             raise BotRunningError('[输入文本检查] 重试次数过多')
@@ -131,7 +123,6 @@ class DeviceHelper:
 
     @staticmethod
     def input_clear(d: u2.Device, _xpath: str, hierarchy_func=None, ignore_str=' ', clear_func=None):
-        # 保证卡号输入正确，因之前有输入卡号时，再次输入时可能会清空失败，需要多次清空才生效
         while True:
             dump_source = d.dump_hierarchy() if hierarchy_func is None else hierarchy_func(d=d)
             x_input = d.xpath(_xpath, dump_source)
@@ -142,13 +133,11 @@ class DeviceHelper:
             if not exist_text.replace(ignore_str, ''):
                 break
             else:
-                # print(f'[清空文本检查] 清空已输入文本: {exist_text}')
                 if clear_func:
                     clear_func(text=exist_text)
                 else:
                     x_input.click()
                     d.clear_text()
-            # 过快会导致 dump 卡住
             d.sleep(1)
 
     @staticmethod

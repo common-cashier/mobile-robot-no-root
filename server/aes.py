@@ -8,7 +8,6 @@ from base64 import b64decode, b64encode
 backend = default_backend()
 
 
-# 加密方法
 def encrypt(data, key, iv):
     cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
     encryptor = cipher.encryptor()
@@ -20,7 +19,6 @@ def encrypt(data, key, iv):
     return b64encode(cipher).decode('utf-8')
 
 
-# 解密方法
 def decrypt(data, key, iv):
     cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=backend)
     decryptor = cipher.decryptor()

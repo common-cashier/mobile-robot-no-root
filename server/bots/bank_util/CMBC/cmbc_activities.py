@@ -17,30 +17,18 @@ from server.bots.bank_util.CMBC.cmbc_keyboard import *
 from server.bots.bank_util.CMBC.cmbc_helper import *
 from server.bots.bank_util.CMBC.cmbc_check import CMBCErrorChecker
 
-"""
-开发 APP 信息
-- 版本 6.11
-"""
 
 _package = 'cn.com.cmbc.newmbank'
 _version = '6.11'
 
 
 def _xpath_desc_text(text, contains=False) -> str:
-    """
-    获取 xpath，因 webview 改版后部分改为 content-desc
-    text 或 content-desc 匹配一项即可，因节点文本不固定
-    """
     if contains:
         return f'[contains(@text,"{text}") or contains(@content-desc,"{text}")]'
     return f'[@text="{text}" or @content-desc="{text}"]'
 
 
 def _ele_desc_text(ele: Union[u2.xpath.XMLElement, u2.xpath.XPathSelector]) -> Optional[str]:
-    """
-    获取节点文本，因 webview 改版后部分改为 content-desc
-    text 或 content-desc 匹配一项即可，因节点文本不固定
-    """
     if isinstance(ele, u2.xpath.XPathSelector):
         ele = ele.get()
     if isinstance(ele, u2.xpath.XMLElement):
@@ -54,9 +42,6 @@ def _get_card_child_ele(d: u2.Device, _source, card_xpath: str, child_xpath: str
 
 class CMBCActivityExecutorBase(BotActivityExecutor):
     def _dump_hierarchy(self, d, check_error=True):
-        """加载结构，使用代理类检查页面是否有错误
-        :param check_error: 是否检查错误
-        """
         retry_limit = 5
         while True:
             source = super()._dump_hierarchy(d, check_error=check_error)
@@ -86,7 +71,6 @@ class CMBCActivityExecutorBase(BotActivityExecutor):
         return False, None
 
     def _find_keyboard_node(self, d: u2.Device, _source: str = None) -> Optional[u2.xpath.XMLElement]:
-        # 键盘节点不固定，需要通过子级节点长度特征识别
         kb_xpath = f'//android.widget.FrameLayout/android.view.View[@package="{_package}"][not(*)]'
         x_kb = d.xpath(kb_xpath, _source)
         return x_kb.get() if x_kb.exists else None
@@ -102,7 +86,6 @@ class CMBCActivityExecutorBase(BotActivityExecutor):
         self._tooltip_back(ctx.d, ctx.source)
 
     def _tooltip_back(self, d: u2.Device, _source: str):
-        # 点击顶部返回，避免键盘仍处于打开状态
         x_back = d.xpath('//*[@resource-id="cn.com.cmbc.newmbank:id/btn_back"]', _source)
         if x_back.exists:
             self._log(f'点击页面返回')
@@ -119,7 +102,6 @@ class CMBCMainActivityExecutor(CMBCActivityExecutorBase):
         return StrHelper.any_contains(self._main_activity, ctx.current_activity)
 
     def go_next(self, ctx: ActivityExecuteContext, target_type: BotActivityType):
-        # 首页
         account_btn_xpath = '//*[@resource-id="cn.com.cmbc.newmbank:id/item_tv"][@text="我的账户"]'
         x_account = ctx.d.xpath(account_btn_xpath, ctx.source)
         if not x_account.exists:
@@ -128,7 +110,6 @@ class CMBCMainActivityExecutor(CMBCActivityExecutorBase):
             ctx.d.sleep(1)
             ctx.reset()  # 下次使用时，重新加载页面结构
 
-        # 我的账户
         x_account = ctx.d.xpath(account_btn_xpath, ctx.source)
         if target_type == BotActivityType.Login or target_type == BotActivityType.QueryAccount:
             x_account.click_exists(1)
@@ -140,7 +121,6 @@ class CMBCLoginActivityExecutor(CMBCActivityExecutorBase):
                        'cn.com.cmbc.newmbank.login.view.activity.PwdLoginActivity']
 
     def check(self, ctx: ActivityCheckContext):
-        # 登录手机银行
         return self.is_current(ctx.current_activity) and CMBCActivityWebView.is_title(ctx.d, ctx.source, '登录')
 
     def is_current(self, activity: str):
@@ -151,7 +131,6 @@ class CMBCLoginActivityExecutor(CMBCActivityExecutorBase):
         if u_phone.exists:
             self._log('输入手机号')
             u_phone.set_text(ctx.account.login_name)
-        # 登录过程中，可能会根据错误提示做点击重新登录
         self._retry_logic(3, lambda **_kwargs: self._login_logic(ctx, **_kwargs))
 
     def _login_logic(self, ctx: ActivityExecuteContext, **kwargs):
@@ -163,7 +142,6 @@ class CMBCLoginActivityExecutor(CMBCActivityExecutorBase):
         done_pwd = False
         while not done_pwd and pwd_retry_limit > 0:
             pwd_retry_limit -= 1
-            # 先聚焦密码框，会有清空已输入密码
             d(resourceId="cn.com.cmbc.newmbank:id/pge_password").click()
             d.xpath('//*[@resource-id="cn.com.cmbc.newmbank:id/imgDeletePwd"]').click_exists(1)
             d.sleep(0.5)  # 等待点选后的显示键盘
@@ -171,16 +149,13 @@ class CMBCLoginActivityExecutor(CMBCActivityExecutorBase):
         if not done_pwd:
             raise BotParseError('输入密码失败')
 
-        # 已阅读并同意以下协议：默认不点击，通过提示消息确定点击
         if error_msg and StrHelper.any_contains(['勾选同意', '隐私政策'], error_msg):
             ctx.d(resourceId="cn.com.cmbc.newmbank:id/lpcb_login_privacy").click_exists(0.2)
-        # 登录
         ctx.d(resourceId="cn.com.cmbc.newmbank:id/btnLogin").click()
 
         if self._exec_retry('登录结果检查', 100, lambda: self._login_result_check(ctx.d)):
             self._log('登录成功')
         else:
-            # 避免多次重登锁卡，未登录成功，则强制停止
             raise BotParseError('未检查到登录结果', is_stop=True)
 
     def _input_password(self, d: u2.Device, pwd: str):
@@ -192,13 +167,11 @@ class CMBCLoginActivityExecutor(CMBCActivityExecutorBase):
         if kb_node is None:
             raise BotParseError(f'未识别到密码键盘信息')
 
-        # self._log(f'键盘节点信息: {kb_node.rect}, {kb_node.get_xpath()}')
         self._log('开始输入登录密码')
         pwd_keyboard = CMBCLoginPwdKeyboard(d, kb_node.get_xpath(), dump_source)
         [pwd_keyboard.input(_char, 0.01) for _char in pwd]
         pwd_keyboard.close()  # 关闭重新点开会从重置键盘字符
 
-        # 检查密码长度
         pwd_text = d(resourceId="cn.com.cmbc.newmbank:id/pge_password").get_text()
         match_len = len(pwd_text) == len(pwd)
         self._log(f'登录密码输入结果: 是否正确 {match_len}, 长度 {len(pwd_text)}, 脱敏密码 {pwd_text}')
@@ -209,24 +182,17 @@ class CMBCLoginActivityExecutor(CMBCActivityExecutorBase):
         if not self.is_current(curr_act):
             return True  # 跳转页面，表示成功
 
-        # 检查错误
         self._dump_hierarchy(d)
         return False
 
 
 class CMBCAccountActivityExecutor(CMBCActivityExecutorBase):
     def check(self, ctx: ActivityCheckContext):
-        # 标题和内容均符合，避免加载中
         return CMBCActivityWebView.is_title(ctx.d, ctx.source, '我的账户') and ctx.d.xpath(
             '//*[@resource-id="cnt-wrapper"]',
             ctx.source).exists
 
     def execute(self, ctx: ActivityExecuteContext, *args, **kwargs):
-        """
-        实现须知：
-        1. 列表加载慢、卡号或余额慢
-        2. 目前仅兼容卡片视角
-        """
         d = ctx.d
         _, card_xpath = self._retry_logic(30, lambda **_kwargs: self._get_card_xpath(ctx, **_kwargs))
         dump_source = None  # self._dump_hierarchy(d)
@@ -259,11 +225,8 @@ class CMBCAccountActivityExecutor(CMBCActivityExecutorBase):
         if not d.xpath('//*[@resource-id="cnt-wrapper"]/*[node()][last()]/*').wait(100):  # 延长等待时间，有时会很慢
             raise BotParseError('未获取到银行卡列表')
 
-        # 通过银行卡内容项逆推上级
-        # 旧版 //*[@resource-id="cnt-wrapper"]/*[last()-1]/*
         x_card_list = d.xpath('//*[@resource-id="cnt-wrapper"]//*[@content-desc="icon"]/..')
         x_card_list.wait()  # 先等待加载元素，允许元素不存在
-        # 先变更视角，再获取列表，目前仅兼容卡片视角
         if self._is_change_list_view(d):
             d.sleep(0.5)
         acct_list = x_card_list.all()
@@ -284,7 +247,6 @@ class CMBCAccountActivityExecutor(CMBCActivityExecutorBase):
                 continue
             self._log(f'匹配到卡号: {card_no}')
             return item_xpath
-        # 不强制停止，可做重试后是否仍然报错
         raise BotCategoryError(ErrorCategory.Data, BotErrorMsg.NotMatchedCardNo)
 
     def _is_change_list_view(self, d: u2.Device):
@@ -314,14 +276,6 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
                 d.xpath('//*[@resource-id="cn.com.cmbc.newmbank:id/rl_webkit_root"]', _source).exists)
 
     def execute(self, ctx: ActivityExecuteContext, *args, **kwargs):
-        """
-        流水须知：
-        1. 默认展示1个月内交易，可以一直滑动分页到近3月数据
-        2. 没有余额
-        3. 列表显示格式，年月标题、流水项 或 无数据
-        4. 已处理情况：分页流水、无记录
-        4.1 分页最后一屏(仅1屏时)后5条查不到，需要展开才能读取到子节点，暂不处理
-        """
         self._log('进入流水页面')
         self._reset_data()  # 每次重置当前流水列表
         self._last_trans, self._max_query_count, self._start_time, _ = BotActionParameter.get_query_trans(**kwargs)
@@ -329,19 +283,15 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
         d = ctx.d
 
         self._exec_retry('等待加载完成', 60, lambda: not self._is_loading(d))
-        # 等待列表显示，内6层节点，含 日期标题+流水项
         d.xpath('//*[@resource-id="cnt-wrapper"]/*[last()]/*/*/*/*/*').wait(30)
 
         had_next = True
         while had_next:
             had_next = self._curr_list(ctx)
             self._log(f'当前流水条数: {self._distinct_list.count()}')
-            # break
             if had_next:
-                # 每次滑动3个流水项，尽可能多抓流水，避免列表内容节点找不到
                 move = min(self._last_item_height * 3, self._list_swipe_height)
                 self._log(f'分页滑动高度: {move}')
-                # 滑动需计算真实高度
                 DeviceHelper.swipe_up_until(ctx.d, ctx.win_size_height, move)
 
         trans_list = self._distinct_list.data_list()
@@ -357,13 +307,11 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
         d = ctx.d
 
         dump_source = self._dump_hierarchy(d)
-        # 滑屏后有问题，读取不到内容节点，终止查询
         if d.xpath('//*[@resource-id="cn.com.cmbc.newmbank:id/rl_webkit_root"]//android.webkit.WebView[not(*)]',
                    dump_source).exists:
             self._log(f'抓取不到内容节点，终止查询')
             return False
 
-        # last 为不固定出现顺序，1 or 2 ，节点项，含 日期标题+流水项
         x_trans_list = ctx.d.xpath('//*[@resource-id="cnt-wrapper"]/*[last()]/*', dump_source)
         if not x_trans_list.exists:
             raise BotParseError('未获取到流水列表')
@@ -373,10 +321,6 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
         if not x_items.exists:
             raise BotParseError('未获取到流水列表内容项')
 
-        """流水列表节点集合
-        1. 包含 日期标题、流水项
-        2. 不包含 暂无数据、加载完成
-        """
         item_list = x_items.all()
         self._log(f'流水列表内容长度: {len(item_list)}')
         for _item in item_list:
@@ -386,7 +330,6 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
                 self._item_date_year = self._re_title_date_year.search(_item_data).group(1)
                 self._log(f'流水日期标题: {_item_data} > {self._item_date_year}')
             elif _type == 2:
-                # self._log(f'流水内容项长度: {len(_item_data)}')
                 item_key, item_detail = self._parse_detail(d, dump_source, _item)
                 _, _, _, _item_height = _item.rect
                 self._last_item_height = max(self._last_item_height, _item_height)
@@ -404,11 +347,9 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
                         self._log(f'符合查询流水条数限制，终止查询，条数: {self._distinct_list.count()}')
                         return False
 
-        # 加载完成
         if d.xpath(f'//*{_xpath_desc_text("加载完成")}', dump_source).exists:
             self._log('检测到流水-加载完成')
             return False
-        # 当前列表有数据
         return len(item_list) > 0
 
     def _parse_item_type(self, d: u2.Device, source: str, parent_xpath: str) -> [int, str]:
@@ -419,9 +360,6 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
             date_title = _ele_desc_text(sub_date_items[0]) if sub_date_items else None
             if date_title and self._re_title_date_year.match(date_title):
                 return 1, date_title
-            # elif _ele_desc_text(sub_items[0]) and StrHelper.contains('暂无数据', _ele_desc_text(sub_items[0])):
-            #     none_title = _ele_desc_text(sub_items[0])
-            #     return 3, none_title
         return 2, None
 
     def _parse_detail(self, d: u2.Device, source: str, item_parent: u2.xpath.XMLElement) \
@@ -430,7 +368,6 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
 
         item_nodes = d.xpath(item_parent.get_xpath(), source).child('/*').all()
         if len(item_nodes) < 4:
-            # self._log('流水详情内容数量过小，忽略')
             return None, None
 
         title_date_nodes = d.xpath(item_nodes[0].get_xpath(), source).child('/*').all()
@@ -445,7 +382,6 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
         date_match = self._re_trans_date.search(txt_date)
         if date_match:
             date_str = f'{self._item_date_year}/{date_match.group(1)}/{date_match.group(2)} {date_match.group(3)}:{date_match.group(4)}:{date_match.group(5)}'
-            # self._log(f'流水日期： {date_str}')
             trans.time = BotHelper.format_time(DateTimeHelper.to_datetime(date_str, '%Y/%m/%d %H:%M:%S'))
 
         x_amount = d.xpath(item_nodes[1].get_xpath(), source).child('/*[1]')
@@ -457,9 +393,7 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
 
         detail_nodes = d.xpath(item_nodes[3].get_xpath(), source).child('/*').all()
         nodes_len = len(detail_nodes)
-        # self._log(f'流水详情节点: {nodes_len}')
         if nodes_len < 8:
-            # self._log(f'流水详情内容子节点数量过小，忽略-{title}')
             return None, None
         had_postscript = False
         pass_next = 0
@@ -468,19 +402,15 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
                 pass_next -= 1
                 continue
 
-            # 配对项值为空时，不会为值节点
             _key = _ele_desc_text(detail_nodes[i]).replace(u'\xa0', '')  # 部分值有特殊符号
             _key_split = _ele_desc_text(detail_nodes[i + 1]) if (i + 1) < nodes_len else None
             _key_val = CMBCHelper.trim_none(_ele_desc_text(detail_nodes[i + 2]) if (i + 2) < nodes_len else None)
             if not _key:
-                # self._log(f'[流水详情] 忽略空项')
                 continue
             if _key_split != ':' and _key_split != '：':
-                # self._log(f'[流水详情] 忽略无分割符 {_key} {_key_split} {_key_val}')
                 continue
 
             if StrHelper.contains('交易卡号', _key) or StrHelper.contains('收款行名', _key):
-                # self._log(f'[流水详情] 忽略字段 {_key} -> {_key_val}')
                 pass
             elif StrHelper.contains('开户行', _key):
                 trans.extension[_key] = _key_val
@@ -491,21 +421,14 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
                 trans.name = _key_val
             elif StrHelper.contains('对方账户', _key):
                 trans.customerAccount = _key_val.replace(' ', '')
-            # elif StrHelper.contains('附言', _key) or StrHelper.contains('备注', _key):
-            #     trans.postscript = _key_val
             else:
-                # self._log(f'[流水详情] 未知项 {_key} -> {_key_val}')
                 pass
-            # 默认表示已配对读取，并忽略下2项
             pass_next = 2
 
         trans.direction = 1 if amount > 0 else 0
         trans.amount = BotHelper.amount_fen(abs(amount))
-        # 无余额 默认为0
         trans.balance = 0
         if not had_postscript:
-            # 一般进入到此是因为显示不全，下一屏就读取就会变为图片
-            # 展开内容都能看到摘要，目前已读取正常流水：结息、转入、转出
             self._log(f'无读取到摘要，过滤此条记录 {title}')
             return None, None
         return _item_key, trans
@@ -553,11 +476,9 @@ class CMBCTransferActivityExecutor(CMBCActivityExecutorBase):
         self._log(f'输入收款人卡号')
         self._input_card_or_amount(d, card_xpath, self._transferee.account)
 
-        # 检查收款银行，自动带出、手动选择
         self._log(f'等待自动选择银行')
         payee_bank = self._exec_retry('等待自动选择银行', 30, lambda: self._get_choose_bank(d, bank_xpath))
         payee_bank = payee_bank or ''
-        # 如果收款银行非必须字段，需要判断是否有自动选择即可
         check_bank_name = True  # 收款信息中无收款银行时，不做校验银行名称
         if self._transferee.bank_name:
             bank_name = self._transferee.bank_name
@@ -567,7 +488,6 @@ class CMBCTransferActivityExecutor(CMBCActivityExecutorBase):
         else:
             raise BotErrorBase(f'未自动选择收款银行 {payee_bank}')
 
-        # 检查付款账号、可用余额
         acct_no = _ele_desc_text(ctx.d.xpath(payer_card_xpath))
         if not StrHelper.is_match_card_num(acct_no, ctx.account.account):
             msg = f'未匹配付款账户信息 {acct_no}'
@@ -582,10 +502,8 @@ class CMBCTransferActivityExecutor(CMBCActivityExecutorBase):
             self._log(f'取消转账: {msg}')
             raise BotCategoryError(ErrorCategory.Data, msg)
 
-        # 输入转账金额
         self._log(f'输入转账金额')
         while True:
-            # 点击转账金额重试处理
             self._input_card_or_amount(d, amount_xpath, self._transferee.amount_yuan_str())
             x_payee_amt = ctx.d.xpath(amount_xpath, self._dump_hierarchy(ctx.d))
             payee_amt = CMBCHelper.convert_amount(_ele_desc_text(x_payee_amt))
@@ -604,7 +522,6 @@ class CMBCTransferActivityExecutor(CMBCActivityExecutorBase):
         self._log(f'点击转账')
         d.xpath(f'//android.widget.Button{_xpath_desc_text("转 账")}').click()
 
-        # 此处可能有提示【卡号无误确认】，但无法识别到节点
         self._log(f'检查是否发送短信验证码')
         kb_node = self._exec_retry('获取短信验证码键盘节点', 30, lambda: self._get_sms_kb_node(d, self._dump_hierarchy(d)))
         if kb_node is None:
@@ -614,16 +531,13 @@ class CMBCTransferActivityExecutor(CMBCActivityExecutorBase):
 
         self._log(f'等待短信验证码')
         sms_code = BotHelper.get_sms_code(sms_code_func=self._sms_code_func)
-        # 短信验证码
         d.sleep(6)  # 获取到验证码，等待顶部短信通知关闭
         self._log(f'输入短信验证码')
         self._input_sms_or_pwd(d, sms_code)
         d.sleep(3)
-        # 交易密码
         self._log(f'输入交易密码')
         self._input_sms_or_pwd(d, ctx.account.payment_pwd)
 
-        # 转账结果识别
         try:
             self._log(f'检查转账结果')
             self._exec_retry('检查转账结果', 60, lambda: self._transfer_result_check(d))
@@ -636,12 +550,10 @@ class CMBCTransferActivityExecutor(CMBCActivityExecutorBase):
             if settings.debug:
                 self._save_screenshot_transfer(d, f'{self._transferee.holder}_转账成功_待确认')
             return True, '转账成功，需确认'
-        # 未检测到失败，则认为成功
         return True, '转账成功'
 
     def _get_choose_bank(self, d: u2.Device, item_xpath: str):
         x_item = d.xpath(item_xpath)
-        # 未选择时为空
         if x_item.exists and _ele_desc_text(x_item) and not StrHelper.contains('请选择', _ele_desc_text(x_item)):
             return _ele_desc_text(x_item)
         self._dump_hierarchy(d)  # 检查错误
@@ -676,33 +588,27 @@ class CMBCTransferActivityExecutor(CMBCActivityExecutorBase):
         if kb_node is None:
             raise BotParseError(f'未识别到密码键盘信息')
 
-        # self._log(f'键盘节点信息: {kb_node.rect}, {kb_node.get_xpath()}')
         self._log('开始输入 交易密码 或 短信验证码')
         pwd_kb = CMBCTransferPwdKeyboard(d, kb_node.get_xpath())
         [pwd_kb.input(_char, 0.01) for _char in pwd]
-        # pwd_kb.close()
         self._log('结束输入 交易密码 或 短信验证码')
 
     def _transfer_result_check(self, d: u2.Device):
         """转账后返回上页处理"""
 
-        # 检查错误和成功结果
         _source = self._dump_hierarchy(d)
         if CMBCTransferResultActivityExecutor.is_current(d, _source):
             if settings.debug:
                 self._save_screenshot_transfer(d, f'{self._transferee.holder}_转账成功')
-            # 点击完成，返回到转账首页
             CMBCTransferResultActivityExecutor.go_back_core(d)
             return True  # 跳转页面，表示成功
 
-        # 转账后，先加载中，再跳到转账结果页。加载中 和 错误信息要区分开
         x_state = d.xpath('//*[@resource-id="cn.com.cmbc.newmbank:id/tv_process_state"]', _source)
         _loadings = ['转账受理成功', '正在处理', '请稍候']
         if x_state.exists and _ele_desc_text(x_state) \
                 and not StrHelper.any_contains(_loadings, _ele_desc_text(x_state)):
             if settings.debug:
                 self._save_screenshot_transfer(d, f'{self._transferee.holder}_转账失败')
-            # 短信验证失败,请重新输入短信验证码
             msg = _ele_desc_text(x_state)
             self._log(f'错误提示: {msg}')
             d.xpath('//*[@resource-id="cn.com.cmbc.newmbank:id/tv_cancel"]').click_exists(2)
@@ -723,22 +629,14 @@ class CMBCReceiptIndexActivityExecutor(CMBCActivityExecutorBase):
                and ctx.d.xpath('//*[@resource-id="cnt-wrapper"]', ctx.source).exists
 
     def execute(self, ctx: ActivityExecuteContext, *args, **kwargs):
-        """
-        回单须知：
-        1. 默认展示1个月内交易
-        2. 已处理情况：首屏回单，无记录
-        3. 因目前只抓取转账的那一条回单，固理解为只获取最新一条即可
-        """
         self._log('进入回单页面')
         self._reset_data()  # 每次重置当前列表
         self._last_transferee, self._max_query_count = BotActionParameter.get_query_receipt(**kwargs)
 
         d = ctx.d
         self._exec_retry('等待加载完成', 60, lambda: not self._is_loading(d))
-        # 等待列表显示
         d.xpath('//*[@resource-id="cnt-wrapper"]/*[last()]/*[1]/*[1]/*').wait(30)
 
-        # 只读取首屏回单，因滑动后显示结果不准确，会抓取不到列表内容
         self._curr_list(ctx)
 
         receipt_list = self._distinct_list.data_list()
@@ -750,13 +648,11 @@ class CMBCReceiptIndexActivityExecutor(CMBCActivityExecutorBase):
     def _curr_list(self, ctx: ActivityExecuteContext):
         d = ctx.d
 
-        # 无记录
         if StrHelper.contains('暂无数据', _ele_desc_text(d.xpath('//*[@resource-id="cnt-wrapper"]/*[1]'))):
             return
 
         dump_source = self._dump_hierarchy(ctx.d)
 
-        # last 为不固定出现顺序，1 or 2
         x_trans_list = ctx.d.xpath('//*[@resource-id="cnt-wrapper"]/*[last()]/*[1]/*[1]', dump_source)
         if not x_trans_list.exists:
             raise BotParseError('未获取到回单列表')
@@ -766,7 +662,6 @@ class CMBCReceiptIndexActivityExecutor(CMBCActivityExecutorBase):
             raise BotParseError('未获取到回单列表内容项')
 
         item_list = x_items.all()
-        # self._log(f'回单列表内容长度: {len(item_list)}')
         for _item in item_list:
             item_xpath = _item.get_xpath()
             _, _, _, self._last_item_height = _item.rect
@@ -797,8 +692,6 @@ class CMBCReceiptIndexActivityExecutor(CMBCActivityExecutorBase):
             return None
 
         receipt = Receipt()
-        # 内部可获取到，此处暂不设置
-        # receipt.name = _ele_desc_text(d.xpath(item_parent_xpath, source).child(f'/android.view.View[1]/*[1]'))
 
         try:
             d.xpath(item_parent_xpath, source).click()
@@ -815,29 +708,11 @@ class CMBCReceiptIndexActivityExecutor(CMBCActivityExecutorBase):
 
         source = self._dump_hierarchy(d)
 
-        # # 刘*鑫中国民生银行
-        # x_payer_name_bank = d.xpath('//*[contains(@text,"付款方")]/../following-sibling::*[1]/*[2]', source)
-        # # 6216 11** **** 2345
-        # x_payer_card = d.xpath('//*[contains(@text,"付款方")]/../following-sibling::*[1]/*[3]', source)
-        # ￥5.00
         x_amount = d.xpath(f'//*{_xpath_desc_text("转账金额", contains=True)}/following-sibling::*[1]', source)
-        # # ￥0.00
-        # x_fee = d.xpath('//*[contains(@text,"手续费")]/following-sibling::*[1]', source)
-        # # 成功
-        # x_result = d.xpath('//*[contains(@text,"转账结果")]/following-sibling::*[1]', source)
-        # 2021-12-28 13:11:46
         x_time = d.xpath(f'//*{_xpath_desc_text("转账时间", contains=True)}/following-sibling::*[1]', source)
-        # 行外转账
         x_type = d.xpath(f'//*{_xpath_desc_text("转账类型", contains=True)}/following-sibling::*[1]', source)
-        # # 网银互联
-        # x_net = d.xpath('//*[contains(@text,"转账汇路")]/following-sibling::*[1]', source)
-        # 手机转账
         x_purpose = d.xpath(f'//*{_xpath_desc_text("转账用途", contains=True)}/following-sibling::*[1]', source)
-        # 张三
         x_payee_name = d.xpath(f'//*{_xpath_desc_text("收款方", contains=True)}/following-sibling::*[1]/*[2]/*[1]', source)
-        # # 招商银行
-        # x_payee_name_bank = d.xpath(f'//*{_xpath_desc_text("收款方", contains=True)}/following-sibling::*[1]/*[2]', source)
-        # 6214 1234 5678 9880
         x_payee_card = d.xpath(f'//*{_xpath_desc_text("收款方", contains=True)}/following-sibling::*[1]/*[3]', source)
 
         receipt.name = _ele_desc_text(x_payee_name)
@@ -846,8 +721,6 @@ class CMBCReceiptIndexActivityExecutor(CMBCActivityExecutorBase):
         receipt.customerAccount = CMBCHelper.get_card_no(_ele_desc_text(x_payee_card))
         receipt.time = BotHelper.format_time(DateTimeHelper.to_datetime(_ele_desc_text(x_time), '%Y-%m-%d %H:%M:%S'))
         receipt.inner = not StrHelper.contains('行外', _ele_desc_text(x_type))
-        # self._log(f'转账结果:{_ele_desc_text(x_result)}')
-        # self._log(f'收款银行:{_ele_desc_text(x_payee_name_bank).replace(receipt.name, "")}')
 
         self._parse_receipt_image(d, source, receipt)
         return receipt
@@ -891,7 +764,6 @@ class CMBCTransferResultActivityExecutor(CMBCActivityExecutorBase):
 
     @staticmethod
     def go_back_core(d: u2.Device, source=None):
-        # 完成
         x_btn_right = d.xpath('//*[@resource-id="cn.com.cmbc.newmbank:id/btn_right"]', source)
         if x_btn_right.exists:
             x_btn_right.click()
@@ -917,7 +789,6 @@ class CMBCReceiptDetailImgActivityExecutor(CMBCActivityExecutorBase):
 
     @staticmethod
     def is_current(d: u2.Device, source=None):
-        # 回单有2种类型，今日(结构化竖屏)、次日(纯图片横屏)
         return (CMBCActivityWebView.is_eq_title(d, source, '电子回单')
                 and (d.xpath('//*[@resource-id="cn.com.cmbc.newmbank:id/iv_receipt"]', source).exists
                      or d.xpath('//*[@resource-id="cnt-wrapper"]', source).exists))

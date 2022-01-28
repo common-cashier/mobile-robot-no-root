@@ -113,9 +113,6 @@ class BotActivityExecutor:
         self.act_config = act_config
 
     def _exec_retry(self, name: str, retry_limit: int, func: Callable[[], Any]) -> Any:
-        """执行重试
-        :return: None or 函数结果值
-        """
         while retry_limit > 0:
             func_result = func()
             if func_result:
@@ -133,9 +130,6 @@ class BotActivityExecutor:
         common_log(full_msg, level, hide)
 
     def _dump_hierarchy(self, d: u2.Device, check_error=True):
-        """加载结构，使用代理类检查页面是否有错误
-        :param check_error: 是否检查错误，仅配置 act_config 代理时有效
-        """
 
         if self.act_config and self.act_config.d_proxy is not None:
             return self.act_config.d_proxy.dump_hierarchy(d, check_error=check_error)
@@ -165,9 +159,6 @@ class BotActivityExecutor:
         pass
 
     def go_next(self, ctx: ActivityExecuteContext, target_type: BotActivityType):
-        """跳转到下个ActivityType，用于多个Activity间有依赖时触发
-        1. 优先使用 click_exists 点击，避免页面有提示框时导致异常
-        """
         pass
 
     def go_back(self, ctx: ActivityExecuteContext, target_type: BotActivityType):
