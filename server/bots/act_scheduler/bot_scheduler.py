@@ -13,6 +13,8 @@ from server.bots.act_scheduler.bot_exceptions import *
 from server.bots.act_scheduler.bot_filter import BotDeviceProxy
 from server.bots.act_scheduler.u2_helpers import DeviceHelper
 
+__all__ = ['BotActionScheduler', 'BotActionWatcher', 'BotConfig']
+
 
 class BotActionWatcher:
     def __init__(self):
@@ -23,7 +25,6 @@ class BotActionWatcher:
 
 
 class BotConfig:
-    """执行配置，Action 和 Activity 流程"""
 
     def __init__(self, activity_executors: List[BotActivityExecutor], action_processes: Dict[ActionType, List[str]],
                  watcher: BotActionWatcher = None, proxy: BotDeviceProxy = None):
@@ -34,7 +35,6 @@ class BotConfig:
 
 
 class _ActionTargetResult:
-    """调度执行目标结果"""
 
     def __init__(self, executed=False, need_login=False, activity_executor: BotActivityExecutor = None,
                  ctx_execute: ActivityExecuteContext = None):
@@ -45,7 +45,6 @@ class _ActionTargetResult:
 
 
 class BotActionScheduler:
-    """执行调度，根据配置 Action 流程跳转，支持刷新、自动重登处理"""
 
     def __init__(self, d: u2.Device, bot_config: BotConfig, account: Account):
         self.d = d
@@ -60,10 +59,10 @@ class BotActionScheduler:
             self._log(f'开始执行 {action_type}')
 
             executed, need_login = False, False
-            execute_action_type = action_type  # 默认为需要执行 ActionType
+            execute_action_type = action_type
             retry_action_type, retry_limit, retry_count = None, 3, 0
-            login_retry_limit = 2  # 登录重试次数
-            force_refresh = True  # 执行流程时强制刷新页面
+            login_retry_limit = 2
+            force_refresh = True
 
             while not executed:
                 process: List[str] = self.bot_config.action_processes.get(execute_action_type)
@@ -73,18 +72,18 @@ class BotActionScheduler:
                 if retry_action_type == execute_action_type:
                     retry_count += 1
                     if retry_count >= retry_limit:
-                        raise BotParseError(f'执行多次，仍停留在页面 {retry_action_type}')
+                        raise BotParseError(f'执行多次，仍未完成 [{retry_action_type.description}]')
                 else:
                     retry_count = 0
                     retry_action_type = execute_action_type
 
                 try:
                     action_result = self._exec_action_process(execute_action_type, process, refresh=force_refresh)
-                    force_refresh = True  # 使用后设置为 True，避免多 Action 切换执行
+                    force_refresh = True
                     ctx_execute = action_result.ctx_execute
                     executor = action_result.activity_executor
-                    need_login = action_result.need_login  # 执行页面过程中，检测到跳转到登录页时
-                    executed = action_result.executed  # 已经执行过页面，例如已登录后，仍执行登录 Action 时
+                    need_login = action_result.need_login
+                    executed = action_result.executed
 
                     if not need_login and not executed:
                         if execute_action_type == action_type:
@@ -113,7 +112,7 @@ class BotActionScheduler:
                         raise BotStopError('登录多次后仍会话超时')
                     self._log('检测到需要重新登录')
                     execute_action_type = ActionType.Login
-                    force_refresh = False  # 如果已经跳转到登录页，则无需刷新页面
+                    force_refresh = False
         finally:
             self._log(f'执行完成 {action_type}')
             self._lock.release()
@@ -121,10 +120,10 @@ class BotActionScheduler:
     def _exec_action_process(self, action_type: ActionType, process: List[str], refresh: bool = True):
         full_process = process.copy()
 
-        had_change_activity = False  # 流程是否触发过，保证页面不会使用缓存页
-        loop_limit = 60  # 循环检查次数限制，避免流程过于复杂或递归调用，包含错误检查，页面回退、页面进入等
+        had_change_activity = False
+        loop_limit = 60
 
-        none_activity_limit, none_activity_counter = 5, 0
+        none_activity_limit, none_activity_counter = 2, 0
         last_activity_type = None
         last_activity_counter_retry, last_activity_counter = 5, 0
 
@@ -132,7 +131,7 @@ class BotActionScheduler:
         ctx_execute = ActivityExecuteContext(self.d, self.account)
         target_executor = None
         executed = False
-        need_login = False  # 执行非登录操作时，检查到登录，表明需要登录，由外层处理
+        need_login = False
 
         while True:
             loop_limit -= 1
@@ -143,7 +142,8 @@ class BotActionScheduler:
 
             current_executor: BotActivityExecutor
             _retry_t, current_executor = RetryHelper \
-                .retry_with_time('获取当前运行页面', lambda **kwargs: self._find_curr_executor(ctx_check, **kwargs))
+                .retry_with_time('获取当前运行页面', retry_limit=60,
+                                 func=lambda **kwargs: self._find_curr_executor(ctx_check, **kwargs))
             if current_executor is None:
                 if none_activity_counter >= none_activity_limit:
                     raise BotParseError('未识别到当前运行页面')
@@ -154,7 +154,7 @@ class BotActionScheduler:
                 continue
             else:
                 none_activity_counter = 0
-                if _retry_t > 0:  # 有多次重试时，表示页面发生变化
+                if _retry_t > 0:
                     self._reset_ctx(ctx_check, ctx_execute)
 
             if action_type == ActionType.Default and current_executor.activity_type == BotActivityType.Main:
@@ -231,12 +231,10 @@ class BotActionScheduler:
         return False
 
     def _find_curr_executor(self, ctx_check: ActivityCheckContext = None, **kwargs):
-        """查找当前页面执行类"""
         retry_time = kwargs.get('retry_time', 0)
         ctx_check = ctx_check if ctx_check is not None else ActivityCheckContext(self.d)
         if retry_time > 0:
-            ctx_check.reset()  # 有重试时，需要重置上下文内容
-
+            ctx_check.reset()
         if self.bot_config.watcher and self.bot_config.watcher.check(ctx_check):
             self.d.sleep(1)
             return False
@@ -254,11 +252,9 @@ class BotActionScheduler:
 
     @staticmethod
     def _is_activity_login(activity_type: BotActivityType):
-        """是否为登录页"""
         return activity_type in [BotActivityType.Login]
 
     def _is_activity_non_login(self, activity_type: BotActivityType, not_main: bool = True):
-        """是否为非登录页，不包含主页"""
         if not_main and activity_type == BotActivityType.Main:
             return False
         return not self._is_activity_login(activity_type)

@@ -1,5 +1,7 @@
 import uiautomator2 as u2
 
+__all__ = ['BotDeviceFilter', 'BotDeviceProxy']
+
 
 class BotDeviceFilter:
     def do(self, d: u2.Device, source: str):

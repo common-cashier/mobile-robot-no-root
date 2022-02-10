@@ -4,6 +4,8 @@ from server.bots.act_scheduler.bot_exceptions import BotParseError, BotRunningEr
 
 import uiautomator2 as u2
 
+__all__ = ['CMBCLoginPwdKeyboard', 'CMBCAmountKeyboard', 'CMBCTransferPwdKeyboard']
+
 
 def list_char_steps(chars: list, start, step):
     data = list()
@@ -52,7 +54,6 @@ class KeyboardConfig:
 
 
 class CMBCLoginPwdKeyboard:
-    """CMBC 登录密码键盘处理"""
 
     _d: u2.Device
     _current_type: KeyboardType
@@ -144,7 +145,6 @@ class CMBCLoginPwdKeyboard:
 
 
 class CMBCAmountKeyboard:
-    """CMBC 转账 金额/收款卡号 键盘处理"""
 
     _d: u2.Device
     _current_type: KeyboardType
@@ -189,7 +189,6 @@ class CMBCAmountKeyboard:
 
 
 class CMBCTransferPwdKeyboard:
-    """CMBC 转账 短信验证码/交易密码 键盘处理"""
 
     _d: u2.Device
     _source: str

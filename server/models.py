@@ -1,26 +1,22 @@
-from _datetime import datetime
+from datetime import datetime
 from typing import Callable, Union
 
 from server.common_helpers import DateTimeHelper, StrHelper
 
 
 def amount_to_fen(amount: Union[str, float]) -> int:
-    """分单位金额整数型数值"""
     return int(round(float(amount) * 100))
 
 
 def amount_to_yuan(amount: Union[str, int, float]) -> float:
-    """元单位金额浮点型数值"""
     return round(float(amount) / 100, 2)  # 四舍五入，保留2位小数
 
 
 def amount_to_yuan_str(amount: Union[str, int, float]) -> str:
-    """元单位金额字符串格式"""
     return '{0:.2f}'.format(amount_to_yuan(amount))
 
 
 def format_datetime(_dt: Union[datetime, str]) -> str:
-    """格式化时间字符串，后台接收格式"""
     return DateTimeHelper.to_str(_dt, '%Y-%m-%d %H:%M:%S')
 
 
@@ -98,7 +94,6 @@ class Transaction:
         return self.is_same_trans(other)
 
     def is_same_trans(self, other):
-        """是否为同一条流水，判断重复流水或最后一条流水使用"""
         if not isinstance(other, Transaction):
             return False
         if self.flowNo and self.flowNo == other.flowNo:
@@ -164,11 +159,9 @@ class Receipt:
         return str(self.__class__) + ": " + str(self.__dict__)
 
     def need_image_format(self):
-        """使用图片格式"""
         self.format = 'jpg'
 
     def generate_bill_no(self) -> str:
-        """生成回单号，仅 `billNo` 无值时生成"""
         if not self.billNo:
             if self.time and self.name and self.customerAccount and self.amount:
                 _ts = DateTimeHelper.to_str(self.time, '%Y%m%d%H%M%S')

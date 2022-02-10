@@ -1,5 +1,7 @@
 import uiautomator2 as u2
 
+__all__ = ['CMBCActivityWebView', 'CMBCHelper']
+
 
 class CMBCActivityWebView:
     @staticmethod

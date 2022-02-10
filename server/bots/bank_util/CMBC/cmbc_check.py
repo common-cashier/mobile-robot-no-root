@@ -8,9 +8,10 @@ from server.bots.act_scheduler.bot_activity_abstracts import ActivityCheckContex
 from server.bots.act_scheduler.bot_scheduler import BotActionWatcher
 from server.bots.act_scheduler.bot_exceptions import *
 
+__all__ = ['CMBCErrorChecker', 'CMBCActionWatcher']
+
 
 class CMBCActionWatcher(BotActionWatcher):
-    """执行全局监听检查，跳转页面过程中处理"""
 
     def check(self, ctx: ActivityCheckContext) -> bool:
         result, _ = CMBCErrorChecker.check(ctx.d, ctx.source)
@@ -18,7 +19,6 @@ class CMBCActionWatcher(BotActionWatcher):
 
 
 class CMBCErrorChecker:
-    """CMBC 运行错误检查"""
 
     @staticmethod
     def check(d: u2.Device, source=None, prior_func: Callable[[str], bool] = None) -> (bool, str):

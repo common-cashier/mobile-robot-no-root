@@ -52,6 +52,8 @@ def parse_sms(sms_msg, bank):
             return re.findall(r'交易码(\d{6})', sms_msg)[0]
         elif '验证码' in sms_msg:
             return re.findall(r'验证码[：:]?(\d{6})', sms_msg)[0]
+        elif '短信密码' in sms_msg:
+            return re.findall(r'短信密码[：:]?(\d{6})', sms_msg)[0]
         else:
             return 1
     else:

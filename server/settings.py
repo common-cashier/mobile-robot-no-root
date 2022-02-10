@@ -84,6 +84,7 @@ sms_bank = {
     'XXC': r'\[兴业银行]$',
     'BOC': r'【中国银行】$',
     'CMBC': r'民生银行',
+    'BCM': r'【交通银行】$',
 }
 
 api = {
@@ -109,13 +110,15 @@ rename_bank = {
 payment_bank = [
     'BOC',
     'CCB',
-    'CMBC'
+    'CMBC',
+    'BCM',
 ]
 
 receive_bank = [
     'BOC',
     'CCB',
-    'CMBC'
+    'CMBC',
+    'BCM',
 ]
 
 

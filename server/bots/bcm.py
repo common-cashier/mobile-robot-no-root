@@ -1,38 +1,41 @@
-from server.bots.bank_util.CMBC.cmbc_activities import *
-from server.bots.bank_util.CMBC.cmbc_check import CMBCActionWatcher
+from server.bots.bank_util.BCM.bcm_activities import *
+from server.bots.bank_util.BCM.bcm_check import BCMActionWatcher
 from server.bots.act_scheduler.bot_host import BotBankHost
 from server.bots.common.common_func import start, stop
 
 from server import settings
 from server.models import Account, WorkFlowParams
 
-_pkg_id = 'cn.com.cmbc.newmbank'
+_pkg_id = 'com.bankcomm.Bankcomm'
 _d: u2.Device = settings.bot.device
 _account: Account = settings.bot.account
 
 _d_proxy = None  # BotDeviceProxy()
 _act_config = None  # BotActivityConfig(d_proxy)
 _executors = [
-    CMBCMainActivityExecutor('main', BotActivityType.Main, _act_config),
-    CMBCLoginActivityExecutor('login', BotActivityType.Login, _act_config),
-    CMBCAccountActivityExecutor('account', BotActivityType.QueryAccount, _act_config),
-    CMBCTransactionActivityExecutor('transaction', BotActivityType.QueryTrans, _act_config),
-    CMBCTransferIndexActivityExecutor('transfer_index', BotActivityType.TransferIndex, _act_config),
-    CMBCTransferActivityExecutor('transfer', BotActivityType.Transfer, _act_config),
-    CMBCReceiptIndexActivityExecutor('receipt', BotActivityType.QueryReceipt, _act_config),
-    CMBCTransferResultActivityExecutor('transfer_result', BotActivityType.TransferResult, _act_config),
-    CMBCReceiptDetailActivityExecutor('receipt_detail', BotActivityType.QueryReceiptDetail, _act_config),
-    CMBCReceiptDetailImgActivityExecutor('receipt_detail_img', BotActivityType.QueryReceiptDetailImage, _act_config),
+    BCMMainActivityExecutor('main', BotActivityType.Main, _act_config),
+    BCMLoginActivityExecutor('login', BotActivityType.Login, _act_config),
+    BCMAccountActivityExecutor('account', BotActivityType.QueryAccount, _act_config),
+    BCMTransactionActivityExecutor('transaction', BotActivityType.QueryTrans, _act_config),
+    BCMTransferIndexActivityExecutor('transfer_index', BotActivityType.TransferIndex, _act_config),
+    BCMTransferActivityExecutor('transfer', BotActivityType.Transfer, _act_config),
+    BCMReceiptIndexActivityExecutor('receipt', BotActivityType.QueryReceipt, _act_config),
+    BCMLoginVerifyActivityExecutor('login_verify', BotActivityType.TransferResult, _act_config),
+    BCMTransactionDetailActivityExecutor('transaction_detail', BotActivityType.QueryTransDetail, _act_config),
+    BCMTransferVerifyActivityExecutor('transfer_verify', BotActivityType.TransferVerify, _act_config),
+    BCMTransferResultActivityExecutor('transfer_result', BotActivityType.TransferResult, _act_config),
+    BCMReceiptDetailActivityExecutor('receipt_detail', BotActivityType.QueryReceiptDetail, _act_config),
+    BCMReceiptDetailImgActivityExecutor('receipt_detail_img', BotActivityType.QueryReceiptDetailImage, _act_config),
 ]
 _processes = {
-    ActionType.Default: ['main'],  # default
+    ActionType.Default: ['main'],
     ActionType.Login: ['main', 'login'],
     ActionType.QueryAccount: ['main', 'account'],
     ActionType.QueryTransaction: ['main', 'account', "transaction"],
     ActionType.Transfer: ['main', 'account', "transfer_index", "transfer"],
     ActionType.QueryReceipt: ['main', 'account', "transfer_index", "receipt"],
 }
-_watcher = CMBCActionWatcher()
+_watcher = BCMActionWatcher()
 _action_config = BotConfig(_executors, _processes, _watcher, _d_proxy)
 _scheduler = BotActionScheduler(_d, _action_config, _account)
 

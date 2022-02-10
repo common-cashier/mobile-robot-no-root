@@ -1,10 +1,12 @@
 import enum
 from enum import auto
 
+__all__ = ['ErrorCategory', 'BotErrorMsg', 'BotErrorBase', 'BotStopError', 'BotCategoryError', 'BotParseError',
+           'BotSessionExpiredError', 'BotRunningError', 'BotLogicRetryError', 'BotErrorHelper']
+
 
 @enum.unique
 class ErrorCategory(enum.Enum):
-    """错误分类"""
     Data = auto(), '数据错误'  # 数据错误，后台信息提供错误
     BankWarning = auto(), '银行提示'  # 银行提示错误，如 银行维护提示
     ParseWrong = auto(), '解析异常'  # 解析异常，如 解析不到期望节点
@@ -24,12 +26,10 @@ class ErrorCategory(enum.Enum):
 
 
 class BotErrorMsg:
-    """卡机错误信息"""
     NotMatchedCardNo = '未找到录入卡号匹配的银行卡，请检查确认后重试'
 
 
 class BotErrorBase(Exception):
-    """自动机异常基类"""
     msg: str  # 错误消息
     is_stop: bool = False  # 是否停止处理，停止银行卡运行，并通知后台
 
@@ -43,14 +43,12 @@ class BotErrorBase(Exception):
 
 
 class BotStopError(BotErrorBase):
-    """自动机停止异常"""
 
     def __init__(self, msg: str):
         super().__init__(msg=msg, is_stop=True)
 
 
 class BotCategoryError(BotErrorBase):
-    """自动机分类异常"""
 
     @staticmethod
     def throw_if(condition: bool, category: ErrorCategory, msg):
@@ -66,14 +64,12 @@ class BotCategoryError(BotErrorBase):
 
 
 class BotParseError(BotCategoryError):
-    """自动机解析异常"""
 
     def __init__(self, msg: str, is_stop=False):
         super().__init__(ErrorCategory.ParseWrong, msg, is_stop)
 
 
 class BotSessionExpiredError(BotErrorBase):
-    """会话超时异常"""
 
     @staticmethod
     def throw_if(condition: bool, msg):
@@ -86,12 +82,10 @@ class BotRunningError(BotErrorBase):
 
 
 class BotLogicRetryError(BotErrorBase):
-    """自动机重逻辑重试异常"""
     pass
 
 
 class BotErrorHelper:
-    """自动机异常帮助类"""
 
     @staticmethod
     def bot_throw_when(condition: bool, category: ErrorCategory, msg):

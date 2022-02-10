@@ -1,7 +1,7 @@
 import os
 import time
 import enum
-from typing import Callable, Any, Optional
+from typing import Callable, Any
 from enum import Enum, auto
 
 import uiautomator2 as u2
@@ -11,13 +11,16 @@ from server.models import Account
 from server.settings import Level, log as common_log
 from server.bots.act_scheduler.bot_filter import BotDeviceProxy
 
+__all__ = ['BotActivityType', 'ActivityContext', 'ActivityCheckContext', 'ActivityExecuteContext', 'BotActivityConfig',
+           'BotActivityExecutor']
+
 
 @enum.unique
 class BotActivityType(Enum):
-    Default = auto()  # 用于未知活动类型时，回退到上页继续查找
+    Default = auto()
     Startup = auto()
     Guide = auto()
-    Transition = auto()  # 用于过渡页面使用
+    Transition = auto()
     Main = auto()
     Login = auto()
     QueryAccount = auto()
@@ -26,6 +29,7 @@ class BotActivityType(Enum):
     Transfer = auto()
     TransferIndex = auto()
     TransferConfirm = auto()
+    TransferVerify = auto()
     TransferResult = auto()
     QueryReceipt = auto()
     QueryReceiptDetail = auto()
@@ -79,7 +83,6 @@ class ActivityContext:
         self._curr_activity = value
 
     def reset(self, source: str = None, current_activity: str = None):
-        """重置 或 重新加载 页面结构"""
         self.source = source
         self.current_activity = current_activity
 
@@ -98,21 +101,19 @@ class ActivityExecuteContext(ActivityContext):
 
 
 class BotActivityConfig:
-    """执行 Activity 配置"""
 
     def __init__(self, proxy: BotDeviceProxy = None):
         self.d_proxy = proxy
 
 
 class BotActivityExecutor:
-    """银行 Activity 执行类"""
 
     def __init__(self, name: str, activity_type: BotActivityType, act_config: BotActivityConfig = None):
         self.name = name
         self.activity_type = activity_type
         self.act_config = act_config
 
-    def _exec_retry(self, name: str, retry_limit: int, func: Callable[[], Any]) -> Any:
+    def _exec_retry(self, name: str, retry_limit: int, func: Callable[[], Any], interval_second: float = 1) -> Any:
         while retry_limit > 0:
             func_result = func()
             if func_result:
@@ -120,7 +121,7 @@ class BotActivityExecutor:
             retry_limit -= 1
             if retry_limit > 0:
                 self._log(f'[{name}] 重试剩余 {retry_limit} 次')
-                time.sleep(1)
+                time.sleep(interval_second)
         return None
 
     def _log(self, msg, level: Level = None, hide: bool = False):
@@ -151,17 +152,14 @@ class BotActivityExecutor:
         d.screenshot(file_name)
 
     def check(self, ctx: ActivityCheckContext):
-        """检查是否符合当前Activity，尽可能检测精准，避免loading或多页面重复内容"""
         pass
 
     def execute(self, ctx: ActivityExecuteContext, *args, **kwargs):
-        """执行当前Activity，功能操作中的流程最后步骤需要返回相关数据"""
         pass
 
     def go_next(self, ctx: ActivityExecuteContext, target_type: BotActivityType):
         pass
 
     def go_back(self, ctx: ActivityExecuteContext, target_type: BotActivityType):
-        """跳转到上个ActivityType，用于多个Activity间有依赖时触发，或回退到主页"""
         ctx.d.press('back')  # default is back
         self._log('触发页面默认返回')

@@ -40,7 +40,6 @@ class GoToPath:
 
 
 class DistinctList:
-    """列表去重类，支持添加、去重、比较 key、value 等"""
     data: Dict[str, Any] = {}
 
     def append(self, key: str, val: Any):

@@ -15,15 +15,13 @@ def report_transaction(params):
 
 
 def report_type_transactions(account_alias: str, balance: int, transactions: List[Transaction], is_fen_amount=False):
-    if transactions is None:
-        return
     filter_list = []
-    for trans in transactions:
-        dict_trans = trans.to_dict(is_fen_amount=is_fen_amount)
-        filter_list.append(dict_trans)
-    if filter_list:
-        api.transaction(account_alias, balance, filter_list)
-        api.status(account_alias, settings.Status.RUNNING)
+    if transactions is not None:
+        for trans in transactions:
+            dict_trans = trans.to_dict(is_fen_amount=is_fen_amount)
+            filter_list.append(dict_trans)
+    api.transaction(account_alias, balance, filter_list)
+    api.status(account_alias, settings.Status.RUNNING)
 
 
 def report_receipt(params):

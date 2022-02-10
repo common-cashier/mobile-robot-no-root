@@ -1,10 +1,11 @@
 import base64
-from datetime import datetime
-from typing import List, Callable
+from typing import List
 
 import uiautomator2 as u2
 
-from server.bots.act_scheduler.bot_exceptions import BotRunningError, BotCategoryError, ErrorCategory, BotParseError
+from server.bots.act_scheduler.bot_exceptions import BotRunningError, BotParseError
+
+__all__ = ['DeviceHelper', 'XPathHelper']
 
 
 class DeviceHelper:
@@ -143,16 +144,19 @@ class DeviceHelper:
     @staticmethod
     def ele_set_text(d: u2.Device, ele: u2.xpath.XMLElement, text: str):
         ele.click()
-        d.send_keys(text)
+        d.xpath.send_text(text)
 
     @staticmethod
     def screenshot_base64(d: u2.Device):
         content = d.screenshot(format='raw')
         return str(base64.b64encode(content), "utf-8")
 
+    @staticmethod
+    def get_child_selector(d: u2.Device, p_xpath: str, child_xpath: str, _source=None) -> u2.xpath.XPathSelector:
+        return d.xpath(p_xpath, _source).child(child_xpath)
+
 
 class XPathHelper:
-    """xpath 帮助类"""
 
     @staticmethod
     def get_first_child(d: u2.Device, source, parent_xpath):
