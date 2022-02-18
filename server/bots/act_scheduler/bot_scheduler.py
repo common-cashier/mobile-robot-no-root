@@ -15,6 +15,8 @@ from server.bots.act_scheduler.u2_helpers import DeviceHelper
 
 __all__ = ['BotActionScheduler', 'BotActionWatcher', 'BotConfig']
 
+ForceRefreshActivity = True
+
 
 class BotActionWatcher:
     def __init__(self):
@@ -62,7 +64,7 @@ class BotActionScheduler:
             execute_action_type = action_type
             retry_action_type, retry_limit, retry_count = None, 3, 0
             login_retry_limit = 2
-            force_refresh = True
+            force_refresh = ForceRefreshActivity
 
             while not executed:
                 process: List[str] = self.bot_config.action_processes.get(execute_action_type)

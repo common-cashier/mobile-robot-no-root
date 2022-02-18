@@ -51,7 +51,7 @@ class CMBCErrorChecker:
                 if StrHelper.contains('未签约手机银行', error_msg):
                     raise BotCategoryError(ErrorCategory.Data, msg=error_msg, is_stop=True)
                 if StrHelper.contains('您需要阅读《中国民生银行隐私政策》后勾选同意', error_msg):
-                    raise BotLogicRetryError(error_msg)  # 登录时无法识别是否已选中，只能通过提示后再次点击
+                    raise BotLogicRetryError(error_msg)
                 if StrHelper.contains('确定要退出系统', error_msg):
                     is_cancel = True
                 return True, error_msg

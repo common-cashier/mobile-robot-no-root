@@ -11,7 +11,7 @@ from server.models import Transaction, Transferee, Receipt
 from server.bots.act_scheduler import *
 
 from server.common_helpers import StrHelper, DateTimeHelper
-from server.bots.act_scheduler.u2_helpers import DeviceHelper
+from server.bots.act_scheduler.u2_helpers import DeviceHelper, XPathHelper
 from server.bots.act_scheduler.bot_helpers import BotHelper
 from server.bots.common.common_models import DistinctList
 
@@ -116,6 +116,7 @@ class CMBCMainActivityExecutor(CMBCActivityExecutorBase):
 class CMBCLoginActivityExecutor(CMBCActivityExecutorBase):
     _login_activity = ['.activity.login.tradlogin.LoginActivity',
                        '.login.view.activity.PwdLoginActivity',
+                       'cn.com.cmbc.newmbank.activity.login.tradlogin.LoginActivity',
                        'cn.com.cmbc.newmbank.login.view.activity.PwdLoginActivity']
 
     def check(self, ctx: ActivityCheckContext):
@@ -191,10 +192,10 @@ class CMBCAccountActivityExecutor(CMBCActivityExecutorBase):
             ctx.source).exists
 
     def execute(self, ctx: ActivityExecuteContext, *args, **kwargs):
-        d = ctx.d
-        _, card_xpath = self._retry_logic(30, lambda **_kwargs: self._get_card_xpath(ctx, **_kwargs))
-        x_balance = DeviceHelper.get_child_selector(d, card_xpath, '/*[6]')
-        balance = CMBCHelper.convert_amount(_ele_desc_text(x_balance))
+        _r, card_info = self._retry_logic(30, lambda **_kwargs: self._get_card_xpath(ctx, **_kwargs))
+        if not _r:
+            raise BotParseError('未找到银行卡节点')
+        balance = card_info.get('balance', 0)
         self._log(f'查询余额: {balance}')
         return {'balance': BotHelper.amount_fen(balance)}
 
@@ -202,15 +203,17 @@ class CMBCAccountActivityExecutor(CMBCActivityExecutorBase):
         if target_type not in [BotActivityType.QueryTrans, BotActivityType.Transfer, BotActivityType.TransferIndex]:
             return
 
-        _, card_xpath = self._retry_logic(30, lambda **_kwargs: self._get_card_xpath(ctx, **_kwargs))
+        _r, card_info = self._retry_logic(30, lambda **_kwargs: self._get_card_xpath(ctx, **_kwargs))
+        if not _r:
+            raise BotParseError('未找到银行卡节点')
         _source = self._dump_hierarchy(ctx.d)
 
         if target_type == BotActivityType.QueryTrans:
-            x_trans_detail = DeviceHelper.get_child_selector(ctx.d, card_xpath, '//*[@content-desc="明细"]', _source)
+            x_trans_detail = ctx.d.xpath(card_info['transfer_xpath'], _source)
             self._log(f'点击明细按钮')
             x_trans_detail.click_exists(1)
         elif target_type == BotActivityType.Transfer or target_type == BotActivityType.TransferIndex:
-            x_transfer = DeviceHelper.get_child_selector(ctx.d, card_xpath, '//*[@content-desc="转账"]', _source)
+            x_transfer = ctx.d.xpath(card_info['transfer_xpath'], _source)
             self._log(f'点击转账按钮')
             x_transfer.click_exists(1)
 
@@ -221,8 +224,8 @@ class CMBCAccountActivityExecutor(CMBCActivityExecutorBase):
         if not d.xpath('//*[@resource-id="cnt-wrapper"]/*[node()][last()]/*').wait(100):  # 延长等待时间，有时会很慢
             raise BotParseError('未获取到银行卡列表')
 
-        x_card_list = d.xpath('//*[@resource-id="cnt-wrapper"]//*[@content-desc="icon"]/..')
-        x_card_list.wait()  # 先等待加载元素，允许元素不存在
+        x_card_list = d.xpath(f'//*[@resource-id="cnt-wrapper"]//*{_xpath_desc_text("icon")}/..')
+        x_card_list.wait()
         if self._is_change_list_view(d):
             d.sleep(0.5)
         acct_list = x_card_list.all()
@@ -242,8 +245,27 @@ class CMBCAccountActivityExecutor(CMBCActivityExecutorBase):
                 self._log(f'过滤不匹配卡号:{card_no}')
                 continue
             self._log(f'匹配到卡号: {card_no}')
-            return item_xpath
+            return self._parse_account(d, item_xpath, dump_source)
         raise BotCategoryError(ErrorCategory.Data, BotErrorMsg.NotMatchedCardNo)
+
+    @staticmethod
+    def _parse_account(d: u2.Device, item_xpath: str, source: str = None):
+        res = {'item_xpath': item_xpath, }
+        child_texts = XPathHelper.get_all_texts(d, item_xpath, source)
+        child_len = len(child_texts)
+        for i in range(child_len):
+            curr_text, curr_xpath = child_texts[i]
+            next_text, next_xpath = None, None
+            if i + 1 < child_len:
+                next_text, next_xpath = child_texts[i + 1]
+
+            if StrHelper.contains('活期', curr_text) and next_text:
+                res['balance'] = CMBCHelper.convert_amount(next_text)
+            elif StrHelper.contains('转账', curr_text) and next_text:
+                res['transfer_xpath'] = curr_xpath
+            elif StrHelper.contains('明细', curr_text) and next_text:
+                res['transaction_xpath'] = curr_xpath
+        return res
 
     def _is_change_list_view(self, d: u2.Device):
         change_list_view = d.xpath(f'//*[@resource-id="cnt-wrapper"]//*{_xpath_desc_text("卡片视角")}')
@@ -260,9 +282,9 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
     _last_trans: Transaction
     _max_query_count: int
     _start_time: datetime
-    _list_swipe_height: int = 0  # 列表滑动高度，读取流水列表滑动时需要
-    _last_item_height: int = 0  # 最后一项流水项高度，避免滑过导致流水丢失
-    _re_title_date_year = re.compile(r'(\d{4})年')
+    _list_swipe_height: int = 0
+    _item_height: int = 0
+    _re_title_date_year = re.compile(r'(\d+)年\d+月')
     _re_trans_date = re.compile(r'(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})')
 
     def check(self, ctx: ActivityCheckContext):
@@ -285,7 +307,7 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
             had_next = self._curr_list(ctx)
             self._log(f'当前流水条数: {self._distinct_list.count()}')
             if had_next:
-                move = min(self._last_item_height * 3, self._list_swipe_height)
+                move = min(self._item_height * 3, self._list_swipe_height)
                 self._log(f'分页滑动高度: {move}')
                 DeviceHelper.swipe_up_until(ctx.d, ctx.win_size_height, move)
 
@@ -293,10 +315,10 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
         return BotHelper.sort_trans_list(trans_list)
 
     def _reset_data(self):
-        self._distinct_list.clear()
+        self._distinct_list.reset()
         self._item_date_year = None
         self._list_swipe_height = 0
-        self._last_item_height = 0
+        self._item_height = 0
 
     def _curr_list(self, ctx: ActivityExecuteContext) -> bool:
         d = ctx.d
@@ -307,7 +329,7 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
             self._log(f'抓取不到内容节点，终止查询')
             return False
 
-        x_trans_list = ctx.d.xpath('//*[@resource-id="cnt-wrapper"]/*[last()]/*', dump_source)
+        x_trans_list = d.xpath('//*[@resource-id="cnt-wrapper"]/*[last()]/*', dump_source)
         if not x_trans_list.exists:
             raise BotParseError('未获取到流水列表')
 
@@ -320,20 +342,23 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
         self._log(f'流水列表内容长度: {len(item_list)}')
         for _item in item_list:
             item_xpath = _item.get_xpath()
-            _type, _item_data = self._parse_item_type(d, dump_source, item_xpath)
+            child_texts = XPathHelper.get_all_texts(d, item_xpath, dump_source)
+            _type, _item_data = self._parse_item_type(child_texts)
             if _type == 1:
                 self._item_date_year = self._re_title_date_year.search(_item_data).group(1)
-                self._log(f'流水日期标题: {_item_data} > {self._item_date_year}')
             elif _type == 2:
-                item_key, item_detail = self._parse_detail(d, dump_source, _item)
-                _, _, _, _item_height = _item.rect
-                self._last_item_height = max(self._last_item_height, _item_height)
+                _, _, _, _height = _item.rect
+                if self._item_height == 0:
+                    self._item_height = _height
+                if (_height + 20) < self._item_height:
+                    continue
+                item_key, item_detail = self._parse_detail(d, dump_source, child_texts)
                 self._log(f'流水明细: {item_detail}')
                 if item_detail is not None:
                     if BotHelper.is_last_trans(item_detail, self._last_trans):
                         self._log(f'查询到最后一条流水，终止查询，流水 ({item_detail.time}, {item_detail.amount})')
                         return False
-                    if self._distinct_list.contains_key(item_key) or self._distinct_list.contains_val(item_detail):
+                    if self._distinct_list.contains_key_val(item_key, item_detail):
                         self._log(f'流水明细数据已存在数据，忽略: {item_detail.name}')
                     else:
                         self._distinct_list.append(item_key, item_detail)
@@ -347,45 +372,36 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
             return False
         return len(item_list) > 0
 
-    def _parse_item_type(self, d: u2.Device, source: str, parent_xpath: str) -> [int, str]:
-        sub_items = d.xpath(parent_xpath, source).child('/*').all()
-        if len(sub_items) == 1:
-            sub_date_items = d.xpath(parent_xpath, source).child(f'//*{_xpath_desc_text("年", contains=True)}').all()
-            date_title = _ele_desc_text(sub_date_items[0]) if sub_date_items else None
+    def _parse_item_type(self, item_details: list[tuple[str, str]]) -> [int, str]:
+        if len(item_details) == 1:
+            date_title, _ = item_details[0]
             if date_title and self._re_title_date_year.match(date_title):
                 return 1, date_title
         return 2, None
 
-    def _parse_detail(self, d: u2.Device, source: str, item_parent: u2.xpath.XMLElement) \
+    def _parse_detail(self, d: u2.Device, source: str, item_details: list[tuple[str, str]]) \
             -> [str, Optional[Transaction]]:
-
-        item_nodes = d.xpath(item_parent.get_xpath(), source).child('/*').all()
-        if len(item_nodes) < 4:
+        if len(item_details) < 4:
             return None, None
 
-        title_date_nodes = d.xpath(item_nodes[0].get_xpath(), source).child('/*').all()
-        if len(title_date_nodes) < 2:
-            self._log('流水详情内容未找到标题和日期，忽略')
-            return None, None
-        txt_date = _ele_desc_text(title_date_nodes[1])
-        title = _ele_desc_text(title_date_nodes[0]) + txt_date  # 标题(附言+转账时间)
+        read_index = 1
+        title, _ = item_details[0]
+        date_match = self._re_trans_date.search(title)
+        if not date_match:
+            date, _ = item_details[1]
+            date_match = self._re_trans_date.search(date)
+            read_index += 1
+        if not date_match:
+            raise BotParseError('未找到流水时间')
 
+        date_str = f'{self._item_date_year}/{date_match.group(1)}/{date_match.group(2)} ' \
+                   f'{date_match.group(3)}:{date_match.group(4)}:{date_match.group(5)}'
         trans = Transaction(extension={})
+        trans.time = BotHelper.format_time(DateTimeHelper.to_datetime(date_str, '%Y/%m/%d %H:%M:%S'))
 
-        date_match = self._re_trans_date.search(txt_date)
-        if date_match:
-            date_str = f'{self._item_date_year}/{date_match.group(1)}/{date_match.group(2)} ' \
-                       f'{date_match.group(3)}:{date_match.group(4)}:{date_match.group(5)}'
-            trans.time = BotHelper.format_time(DateTimeHelper.to_datetime(date_str, '%Y/%m/%d %H:%M:%S'))
-
-        x_amount = d.xpath(item_nodes[1].get_xpath(), source).child('/*[1]')
-        if not x_amount.exists:  # 翻页后页面内容会混乱
-            self._log(f'流水项找不到金额: {title}')
-            return None, None
-        amount = CMBCHelper.convert_amount(_ele_desc_text(x_amount))
-        _item_key = f'{title}_{amount}'  # 标题(附言+转账时间)_金额
-
-        detail_nodes = d.xpath(item_nodes[3].get_xpath(), source).child('/*').all()
+        amount_str, amount_xpath = item_details[read_index]
+        amount = CMBCHelper.convert_amount(amount_str)
+        detail_nodes = d.xpath(f'{amount_xpath}/../following-sibling::*[2]/*', source).all()
         nodes_len = len(detail_nodes)
         if nodes_len < 8:
             return None, None
@@ -425,6 +441,8 @@ class CMBCTransactionActivityExecutor(CMBCActivityExecutorBase):
         if not had_postscript:
             self._log(f'无读取到摘要，过滤此条记录 {title}')
             return None, None
+
+        _item_key = f'{date_str}_{trans.name}_{trans.postscript}_{amount}'
         return _item_key, trans
 
 
@@ -619,6 +637,7 @@ class CMBCReceiptIndexActivityExecutor(CMBCActivityExecutorBase):
     _distinct_list = DistinctList()  # 去重列表
     _max_query_count: int
     _last_transferee: Transferee
+    _re_title_name = re.compile(r'^(.*)尾号')
 
     def check(self, ctx: ActivityCheckContext):
         return CMBCActivityWebView.is_eq_title(ctx.d, ctx.source, '转账历史') \
@@ -639,7 +658,7 @@ class CMBCReceiptIndexActivityExecutor(CMBCActivityExecutorBase):
         return BotHelper.sort_receipt_list(receipt_list)
 
     def _reset_data(self):
-        self._distinct_list.clear()
+        self._distinct_list.reset()
 
     def _curr_list(self, ctx: ActivityExecuteContext):
         d = ctx.d
@@ -664,10 +683,11 @@ class CMBCReceiptIndexActivityExecutor(CMBCActivityExecutorBase):
             item_detail = self._get_detail(d, dump_source, item_xpath)
             self._log(f'回单明细: {item_detail}')
             if item_detail is not None:
-                if self._distinct_list.contains_val(item_detail):
+                item_key = f'{item_detail.billNo}{item_detail.name}{item_detail.time}{item_detail.amount}'
+                if self._distinct_list.contains_key_val(item_key, item_detail):
                     self._log(f'回单明细数据已存在数据，忽略: {item_detail.name}')
                 else:
-                    self._distinct_list.append(str(item_detail), item_detail)
+                    self._distinct_list.append(item_key, item_detail)
 
                 if BotHelper.is_transfer_receipt(item_detail, self._last_transferee):
                     self._log(f'查询到最后一条回单，终止查询，回单 ({item_detail.time}, {item_detail.amount})')
@@ -688,9 +708,19 @@ class CMBCReceiptIndexActivityExecutor(CMBCActivityExecutorBase):
 
         receipt = Receipt()
 
+        x_title = d.xpath(item_parent_xpath, source).child('/*[contains(@text,"尾号")]')
+        x_name = d.xpath(item_parent_xpath, source).child(f'/android.view.View[1]/*[1]')
+        if x_title.exists:
+            title = _ele_desc_text(x_title)
+            receipt.name = self._re_title_name.search(title).group(1)
+        elif x_name.exists:
+            receipt.name = _ele_desc_text(x_title)
+
         try:
             d.xpath(item_parent_xpath, source).click()
             receipt = self._parse_detail(d, receipt)
+            if not receipt.name:
+                self._log(f'回单明细未获取到对方姓名: {receipt.time} {receipt.amount} {receipt.postscript}')
         finally:
             DeviceHelper.press_back(d)
         return receipt
@@ -699,25 +729,38 @@ class CMBCReceiptIndexActivityExecutor(CMBCActivityExecutorBase):
 
         self._exec_retry('等待回单明细详情', 60, lambda **_kwargs: self._wait_receipt_detail(d))
         d.sleep(0.5)  # 避免过快
-
         source = self._dump_hierarchy(d)
 
         x_amount = d.xpath(f'//*{_xpath_desc_text("转账金额", contains=True)}/following-sibling::*[1]', source)
         x_time = d.xpath(f'//*{_xpath_desc_text("转账时间", contains=True)}/following-sibling::*[1]', source)
         x_type = d.xpath(f'//*{_xpath_desc_text("转账类型", contains=True)}/following-sibling::*[1]', source)
         x_purpose = d.xpath(f'//*{_xpath_desc_text("转账用途", contains=True)}/following-sibling::*[1]', source)
-        x_payee_name = d.xpath(f'//*{_xpath_desc_text("收款方", contains=True)}/following-sibling::*[1]/*[2]/*[1]', source)
-        x_payee_card = d.xpath(f'//*{_xpath_desc_text("收款方", contains=True)}/following-sibling::*[1]/*[3]', source)
 
-        receipt.name = _ele_desc_text(x_payee_name)
+        payee_info = self._get_category_info(d, source, '收款方')
+        receipt.name = payee_info.get('name') or receipt.name
         receipt.postscript = _ele_desc_text(x_purpose)
         receipt.amount = BotHelper.amount_fen(CMBCHelper.convert_amount(_ele_desc_text(x_amount)))
-        receipt.customerAccount = CMBCHelper.get_card_no(_ele_desc_text(x_payee_card))
+        receipt.customerAccount = CMBCHelper.get_card_no(payee_info.get('card') or '')
         receipt.time = BotHelper.format_time(DateTimeHelper.to_datetime(_ele_desc_text(x_time), '%Y-%m-%d %H:%M:%S'))
         receipt.inner = not StrHelper.contains('行外', _ele_desc_text(x_type))
 
         self._parse_receipt_image(d, source, receipt)
         return receipt
+
+    @staticmethod
+    def _get_category_info(d: u2.Device, source: str, category: str) -> dict:
+        parent_xpath = [
+            f'//*{_xpath_desc_text(category, contains=True)}/following-sibling::*[1]',
+            f'//*{_xpath_desc_text(category, contains=True)}/../following-sibling::*[1]'
+        ]
+        filters = ['图标']
+        for _xpath in parent_xpath:
+            texts = XPathHelper.get_all_texts(d, _xpath, source, filters)
+            if len(texts) == 2:
+                return {'name': '', 'bank': texts[0][0], 'card': texts[1][0]}
+            elif len(texts) == 3:
+                return {'name': texts[0][0], 'bank': texts[1][0], 'card': texts[2][0]}
+        return {'name': '', 'bank': '', 'card': ''}
 
     def _parse_receipt_image(self, d: u2.Device, source, receipt: Receipt):
 

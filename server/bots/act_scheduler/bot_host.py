@@ -197,7 +197,7 @@ class BotBankHost(object):
 
     def receipt(self):
 
-        @self._wrapper.exec_wrap(name='查询回单', retry_limit=5)
+        @self._wrapper.exec_wrap(name='查询回单', retry_limit=1)
         def _qry_receipt(last_transferee: Transferee) -> List[Receipt]:
             return self._scheduler.execute(ActionType.QueryReceipt,
                                            last_transferee=last_transferee,

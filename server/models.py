@@ -156,7 +156,21 @@ class Receipt:
         self.content = content
 
     def __repr__(self):
-        return str(self.__class__) + ": " + str(self.__dict__)
+        filtered_dictionary = {key: value for key, value in self.__dict__.items() if key not in ['content']}
+        return str(self.__class__) + ": " + str(filtered_dictionary)
+
+    def __eq__(self, other):
+        return self.is_same_receipt(other)
+
+    def is_same_receipt(self, other):
+        if not isinstance(other, Receipt):
+            return False
+        if self.billNo and self.billNo == other.billNo:
+            return True
+        return (self.time == other.time and self.name == other.name
+                and self.customerAccount == other.customerAccount and self.amount == other.amount
+                and self.inner == other.inner and self.format == other.format
+                and self.postscript == other.postscript and self.flowNo == other.flowNo)
 
     def need_image_format(self):
         self.format = 'jpg'

@@ -85,6 +85,7 @@ sms_bank = {
     'BOC': r'【中国银行】$',
     'CMBC': r'民生银行',
     'BCM': r'【交通银行】$',
+    'PSBC': r'^【邮储银行】',
 }
 
 api = {
@@ -119,6 +120,7 @@ receive_bank = [
     'CCB',
     'CMBC',
     'BCM',
+    'PSBC'
 ]
 
 

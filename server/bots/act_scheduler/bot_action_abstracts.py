@@ -44,9 +44,9 @@ class BotActionParameter:
 
         now = datetime.now()
         start_time: datetime = kwargs.get('start_time', now - timedelta(days=1))
-        last_trans_time = DateTimeHelper.to_datetime(last_trans.time)
-        if last_trans_time > start_time:
-            start_time = last_trans_time
+        if last_trans:
+            last_trans_time = DateTimeHelper.to_datetime(last_trans.time)
+            start_time = last_trans_time if last_trans_time > start_time else start_time
         end_time: datetime = kwargs.get('end_time', now)
         return last_trans, max_count, start_time, end_time
 

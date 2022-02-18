@@ -269,7 +269,7 @@ class BCMTransactionActivityExecutor(BCMActivityExecutorBase):
         return BotHelper.sort_trans_list(trans_list)
 
     def _reset_data(self):
-        self._distinct_list.clear()
+        self._distinct_list.reset()
         self._last_item_height = 0
 
     def _curr_list(self, ctx: ActivityExecuteContext) -> bool:
@@ -304,7 +304,7 @@ class BCMTransactionActivityExecutor(BCMActivityExecutorBase):
                 if BotHelper.is_last_trans(item_detail, self._last_trans):
                     self._log(f'查询到最后一条流水，终止查询，流水 ({item_detail.time}, {item_detail.amount})')
                     return False
-                if self._distinct_list.contains_val(item_detail):
+                if self._distinct_list.contains_key_val(item_key, item_detail):
                     self._log(f'流水明细数据已存在数据，忽略: {item_detail.name}')
                 else:
                     had_new_trans = True
@@ -579,7 +579,7 @@ class BCMReceiptIndexActivityExecutor(BCMActivityExecutorBase):
         return BotHelper.sort_receipt_list(receipt_list)
 
     def _reset_data(self):
-        self._distinct_list.clear()
+        self._distinct_list.reset()
 
     def _curr_list(self, ctx: ActivityExecuteContext):
         d = ctx.d
@@ -603,10 +603,11 @@ class BCMReceiptIndexActivityExecutor(BCMActivityExecutorBase):
             item_detail = self._get_detail(d, _item)
             self._log(f'回单明细: {item_detail}')
             if item_detail is not None:
-                if self._distinct_list.contains_val(item_detail):
+                item_key = f'{item_detail.billNo}{item_detail.name}{item_detail.time}{item_detail.amount}'
+                if self._distinct_list.contains_key_val(item_key, item_detail):
                     self._log(f'回单明细数据已存在数据，忽略: {item_detail.name}')
                 else:
-                    self._distinct_list.append(str(item_detail), item_detail)
+                    self._distinct_list.append(item_key, item_detail)
 
                 if BotHelper.is_transfer_receipt(item_detail, self._last_transferee):
                     self._log(f'查询到最后一条回单，终止查询，回单 ({item_detail.time}, {item_detail.amount})')

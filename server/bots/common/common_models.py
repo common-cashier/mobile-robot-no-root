@@ -41,15 +41,24 @@ class GoToPath:
 
 class DistinctList:
     data: Dict[str, Any] = {}
+    _ignore_keys: List[str] = []
 
     def append(self, key: str, val: Any):
         self.data[key] = val
 
-    def contains_key(self, _key: str):
-        return _key in self.data
+    def contains_key(self, _key: str, with_ignore=True):
+        return (_key in self.data) or (with_ignore and _key in self._ignore_keys)
 
     def contains_val(self, _val: Any):
         return _val in self.data.values()
+
+    def contains_key_val(self, _key: str, _val: Any):
+        if self.contains_key(_key):
+            return True
+        if self.contains_val(_val):
+            self._ignore_keys.append(_key)
+            return True
+        return False
 
     def data_list(self):
         return list(self.data.values())
@@ -57,8 +66,9 @@ class DistinctList:
     def count(self):
         return len(self.data)
 
-    def clear(self):
+    def reset(self):
         self.data.clear()
+        self._ignore_keys.clear()
 
     def __len__(self):
         return len(self.data)

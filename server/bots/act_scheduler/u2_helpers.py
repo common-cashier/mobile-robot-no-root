@@ -159,5 +159,17 @@ class DeviceHelper:
 class XPathHelper:
 
     @staticmethod
-    def get_first_child(d: u2.Device, source, parent_xpath):
+    def get_first_child(d: u2.Device, parent_xpath: str, source: str = None):
         return d.xpath(parent_xpath, source).child('/*[1]')
+
+    @staticmethod
+    def get_all_texts(d: u2.Device, parent_xpath: str, source: str = None, filters=None) -> List[tuple[str, str]]:
+        had_text_xpath = '//*[string-length(@text)>0 or string-length(@content-desc)>0]'
+        nodes = d.xpath(parent_xpath, source).child(had_text_xpath).all()
+        result = []
+        for _n in nodes:
+            text = _n.text or _n.attrib.get('content-desc') or ''
+            if filters and text in filters:
+                continue
+            result.append((text, _n.get_xpath()))
+        return result

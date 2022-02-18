@@ -31,14 +31,15 @@ class BotHelper:
         return format_datetime(dt)
 
     @staticmethod
-    def is_match_card_num(card_mask: str, card_original: str):
-        if not card_mask:
+    def is_match_num_mask(str_mask: str, match_target: str, masks=None):
+        if not str_mask:
             return False
 
+        masks = masks if masks else ['*', ' ']
         re_str = ''
         is_star = False
-        for ch in card_mask:
-            if ch in ['*', ' ']:
+        for ch in str_mask:
+            if ch in masks:
                 is_star = True
             else:
                 if is_star:
@@ -46,7 +47,11 @@ class BotHelper:
                     is_star = False
                 re_str += ch
 
-        return re.match(re_str, card_original) is not None
+        return re.match(re_str, match_target) is not None
+
+    @staticmethod
+    def is_match_card_num(card_mask: str, card_original: str):
+        return BotHelper.is_match_num_mask(card_mask, card_original)
 
     @staticmethod
     def is_match_card_num_tail(card_tail: str, card_original: str):

@@ -19,25 +19,29 @@ class BotFactory:
         self.doing = False
 
     def cast_work_flow(self):
-        while True:
-            break_res: BreakRes = self.bank.do_work(WorkFlow.BREAK)
-            if break_res and break_res.is_break:
-                log('--流程错误: %s' % break_res.break_reason, settings.Level.SYSTEM)
-                break
-            if not self.bank.do_work(WorkFlow.CHECK_HOME):
-                self.bank.do_work(WorkFlow.GO_HOME)
-                continue
-            if not self.bank.do_work(WorkFlow.CHECK_LOGIN):
-                self.bank.do_work(WorkFlow.DO_LOGIN)
-                self.bank.do_work(WorkFlow.GO_HOME)
-                continue
-            if settings.start_kind == 1:
-                if query_order(settings.bot.account.alias):
-                    self.cast_transfer()
+        try:
+            while True:
+                break_res: BreakRes = self.bank.do_work(WorkFlow.BREAK)
+                if break_res and break_res.is_break:
+                    log('--流程错误: %s' % break_res.break_reason, settings.Level.SYSTEM)
+                    break
+                if not self.bank.do_work(WorkFlow.CHECK_HOME):
+                    self.bank.do_work(WorkFlow.GO_HOME)
+                    continue
+                if not self.bank.do_work(WorkFlow.CHECK_LOGIN):
+                    self.bank.do_work(WorkFlow.DO_LOGIN)
+                    self.bank.do_work(WorkFlow.GO_HOME)
+                    continue
+                if settings.start_kind == 1:
+                    if query_order(settings.bot.account.alias):
+                        self.cast_transfer()
+                    else:
+                        self.cast_transaction()
                 else:
                     self.cast_transaction()
-            else:
-                self.cast_transaction()
+        except Exception as err:
+            api.status(settings.bot.account.alias, settings.Status.EXCEPTED, f'运行出错-{str(err)}')
+            raise err
 
     def cast_start(self, params):
         if self.doing:

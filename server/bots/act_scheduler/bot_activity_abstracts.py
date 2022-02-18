@@ -6,6 +6,7 @@ from enum import Enum, auto
 
 import uiautomator2 as u2
 
+from server.bots.act_scheduler.bot_exceptions import BotParseError
 from server.common_helpers import DateTimeHelper
 from server.models import Account
 from server.settings import Level, log as common_log
@@ -31,6 +32,7 @@ class BotActivityType(Enum):
     TransferConfirm = auto()
     TransferVerify = auto()
     TransferResult = auto()
+    QueryReceiptTransition = auto()
     QueryReceipt = auto()
     QueryReceiptDetail = auto()
     QueryReceiptDetailImage = auto()
@@ -113,7 +115,10 @@ class BotActivityExecutor:
         self.activity_type = activity_type
         self.act_config = act_config
 
-    def _exec_retry(self, name: str, retry_limit: int, func: Callable[[], Any], interval_second: float = 1) -> Any:
+    def _exec_retry(self, name: str, retry_limit: int
+                    , func: Callable[[], Any]
+                    , interval_second: float = 1
+                    , with_error=False) -> Any:
         while retry_limit > 0:
             func_result = func()
             if func_result:
@@ -122,6 +127,8 @@ class BotActivityExecutor:
             if retry_limit > 0:
                 self._log(f'[{name}] 重试剩余 {retry_limit} 次')
                 time.sleep(interval_second)
+        if with_error:
+            raise BotParseError(f'{name}，加载失败')
         return None
 
     def _log(self, msg, level: Level = None, hide: bool = False):
