@@ -30,9 +30,9 @@ class PSBCErrorChecker:
             d.xpath(x_ignore_risk.get().get_xpath()).click()
             return True, None
 
-        if DeviceHelper.is_activity(d, '.android.activity.SplashActivity'):
-            ui_cancel = d.xpath('//*[@text="暂不更新"]', source)
-            if ui_cancel.exists:
+        ui_cancel = d.xpath('//*[@text="暂不更新"]', source)
+        if ui_cancel.exists:
+            if DeviceHelper.is_activity_contains(d, '.android.activity.SplashActivity'):
                 ui_cancel.click_exists(timeout=1)
                 common_log(f'提示更新: 暂不更新')
                 return True, None
@@ -49,6 +49,18 @@ class PSBCErrorChecker:
                 return True, error_msg
             finally:
                 d.xpath(safe_dialog_xpath, source).child('//*[@resource-id="dialogButton"]').click_exists(0.2)
+
+        tips_continue_xpath = '//*[@resource-id="com.yitong.mbank.psbc:id/dialog_sure_cancel_ll"]//*[@text="继续转账"]'
+        x_tips_continue = d.xpath(tips_continue_xpath, source)
+        if x_tips_continue.exists:
+            try:
+                x_error_msg = d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/sc_dialog_msg_txt"]', source)
+                error_msg = x_error_msg.get_text() if x_error_msg.exists else ''
+                common_log(f'检测到转账提示: {error_msg}')
+
+                return True, error_msg
+            finally:
+                x_tips_continue.click_exists(0.1)
 
         x_error_msg = d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/sc_dialog_msg_txt"]', source)
         if x_error_msg.exists:
@@ -72,6 +84,8 @@ class PSBCErrorChecker:
                     raise BotSessionExpiredError(error_msg)
                 if StrHelper.any_contains(['用户名或密码错误', '未注册过手机银行'], error_msg):
                     raise BotCategoryError(ErrorCategory.Data, msg=error_msg, is_stop=True)
+                if StrHelper.any_contains(['未查询对应客户信息'], error_msg):
+                    raise BotCategoryError(ErrorCategory.BankWarning, msg=error_msg, is_stop=True)
                 if StrHelper.any_contains(['查询首次登录信息错误'], error_msg):
                     raise BotCategoryError(ErrorCategory.BankWarning, msg=error_msg, is_stop=True)
                 if StrHelper.any_contains(['转账金额大于当前可用余额', '短信验证码不一致'], error_msg):

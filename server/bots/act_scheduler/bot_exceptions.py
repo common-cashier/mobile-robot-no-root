@@ -102,6 +102,12 @@ class BotErrorHelper:
             return False
         if isinstance(error, BotCategoryError):
             return error.category in [ErrorCategory.Network]
+        if BotErrorHelper.is_logic_retry(error):
+            return True
+        return False
+
+    @staticmethod
+    def is_logic_retry(error: Exception):
         if isinstance(error, BotLogicRetryError):
             return True
         return False

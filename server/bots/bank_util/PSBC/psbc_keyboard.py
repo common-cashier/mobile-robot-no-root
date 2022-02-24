@@ -5,7 +5,7 @@ import uiautomator2 as u2
 
 from server.bots.act_scheduler.bot_exceptions import BotRunningError, BotParseError
 
-__all__ = ['PSBCNumberKeyboard', 'PSBCLoginPwdKeyboard', 'PSBCTransferPwdKeyboard']
+__all__ = ['PSBCNumberKeyboard', 'PSBCFullPwdKeyboard']
 
 
 @enum.unique
@@ -49,12 +49,12 @@ class PSBCNumberKeyboard:
         self._xpath_child('//*[@resource-id="com.yitong.mbank.psbc:id/btnBoardCancel"]').click()
 
 
-class PSBCLoginPwdKeyboard:
+class PSBCFullPwdKeyboard:
 
     def __init__(self, d: u2.Device, kb_xpath: str, source: str = None):
         keyboard = d.xpath(kb_xpath, source)
         if not keyboard.exists:
-            raise u2.exceptions.XPathElementNotFoundError('未找到 键盘 节点')
+            raise u2.exceptions.XPathElementNotFoundError('未找到 密码键盘 节点')
 
         self._d = d
         self._source = d.dump_hierarchy() if source is None else source
@@ -126,7 +126,3 @@ class PSBCLoginPwdKeyboard:
 
     def close(self):
         self._xpath_child('//*[@resource-id="com.yitong.mbank.psbc:id/btnBoardCancel"]').click()
-
-
-class PSBCTransferPwdKeyboard:
-    pass

@@ -68,7 +68,7 @@ class PSBCActivityExecutorBase(BotActivityExecutor):
         return x_loading.exists and StrHelper.contains('交易正在处理', x_loading.get_text())
 
     def go_back(self, ctx: ActivityExecuteContext, target_type: BotActivityType):
-        x_home = ctx.d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/btnTopRight"][@content-desc="主页"]', ctx.source)
+        x_home = ctx.d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/btnTopRight"]', ctx.source)
         if x_home.exists:
             self._log('点击回到主页')
             x_home.click_exists(1)
@@ -169,7 +169,7 @@ class PSBCLoginActivityExecutor(PSBCActivityExecutorBase):
             d.xpath(pwd_xpath).click()
             d.sleep(0.3)
         d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/ivClearPwd"]').click_exists(0.1)
-        kb = PSBCLoginPwdKeyboard(d, kb_xpath)
+        kb = PSBCFullPwdKeyboard(d, kb_xpath)
         [kb.input(_t, 0.1) for _t in login_pwd]
         kb.close()
         input_text = d.xpath(pwd_xpath).get_text()
@@ -200,18 +200,23 @@ class PSBCLoginActivityExecutor(PSBCActivityExecutorBase):
 
 class PSBCAccountActivityExecutor(PSBCActivityExecutorBase):
     _re_card_index = re.compile(r'card(\d+)$')
+    _un_recognize_count = 0
 
     def check(self, ctx: ActivityCheckContext):
         return self.is_current(ctx.d, ctx.source)
 
     @staticmethod
     def is_current(d: u2.Device, source: str):
-        return PSBCHelper.is_eq_title(d, source, '我的账户') and d.xpath('//*[@resource-id="list"]', source).exists
+        return PSBCHelper.is_eq_title(d, source, '我的账户')
 
     def execute(self, ctx: ActivityExecuteContext, *args, **kwargs):
         self._log('进入我的账户')
         d = ctx.d
         self._wait_loading(d)
+
+        x_list = d.xpath('//*[@resource-id="list"]')
+        x_list.wait(20)
+        d.sleep(2)
 
         card_index, card_xpath = self._expand_card(ctx)
         balance = self._get_card_balance(d, card_xpath, card_index)
@@ -246,7 +251,15 @@ class PSBCAccountActivityExecutor(PSBCActivityExecutorBase):
 
     def _expand_card(self, ctx: ActivityExecuteContext, **_) -> [str, str]:
         d = ctx.d
+
         _source = self._dump_hierarchy(d)
+        if d.xpath('//android.webkit.WebView[not(*)]', _source).exists:
+            self._un_recognize_count += 1
+            if self._un_recognize_count > 5:
+                raise BotParseError(f'重试 {self._un_recognize_count} 次仍未找到余额', is_stop=True)
+            self.go_back(ctx, BotActivityType.Default)
+            raise BotLogicRetryError('加载余额节点失败，等待重新进入')
+        self._un_recognize_count = 0
 
         x_card_list = d.xpath('//*[@resource-id="list"]', _source).child('//*[starts-with(@resource-id, "card")]')
         card_list = x_card_list.all()
@@ -263,10 +276,10 @@ class PSBCAccountActivityExecutor(PSBCActivityExecutorBase):
             if not BotHelper.is_match_card_num(card_mask, ctx.account.account):
                 self._log(f'过滤不匹配卡号: {card_mask} ，银行卡索引 {card_index}')
                 continue
-            amt_exists = self._exec_retry('获取银行卡可用余额', 60,
+            amt_exists = self._exec_retry('获取银行卡可用余额', 30,
                                           func=lambda: self._wait_card_amt(d, card_index, card_xpath))
             if not amt_exists:
-                raise BotParseError(f'未获取到银行卡 {card_mask} 可用余额')
+                raise BotLogicRetryError(f'未获取到银行卡 {card_mask} 可用余额')
 
             if not self._is_detail(d, _source):
                 self._log(f'银行卡 {card_mask} 展开详情')
@@ -521,6 +534,7 @@ class PSBCTransferActivityExecutor(PSBCActivityExecutorBase):
         if self._transferee.postscript:
             self._log(f'输入附言: {self._transferee.postscript}')
             d.xpath(postscript_xpath).set_text(self._transferee.postscript)
+            DeviceHelper.press_back(d)
 
         self._log(f'点击转账')
         d.xpath(f'//*[@resource-id="confirm"]').click()
@@ -533,7 +547,6 @@ class PSBCTransferActivityExecutor(PSBCActivityExecutorBase):
             self._save_screenshot_transfer(d, '转账失败_未找到 [获取短信验证码按钮]')
             self._tooltip_back(d)
             raise BotErrorBase('未识别到输入短信验证码操作，疑似转账过程提示错误')
-        return False, '转账失败-暂不支持付款'
         send_sms_node.click()
         self._wait_loading(d)
 
@@ -542,13 +555,16 @@ class PSBCTransferActivityExecutor(PSBCActivityExecutorBase):
         d.sleep(6)
         self._log(f'输入短信验证码')
         self._trans_child(d, '//*[contains(@resource-id,"mulTransDialogCode")]').set_text(sms_code)
-        self._log(f'确定短信验证码')
+        DeviceHelper.press_back(d)
+
+        x_pay_pwd = d.xpath('//android.widget.EditText[contains(@text,"交易密码") or @password="true"]')
+        if x_pay_pwd.exists:
+            self._log(f'输入交易密码')
+            self._input_pay_pwd(d, x_pay_pwd.get(), ctx.account.payment_pwd)
+
+        self._log(f'确定转账')
         self._trans_child(d, '//*[contains(@resource-id,"dialogButton")][@text="确定"]').click()
         self._wait_loading(d)
-        d.sleep(2)
-
-        self._log(f'输入交易密码')
-        self._input_pay_pwd(d, ctx.account.payment_pwd)
 
         try:
             self._log(f'检查转账结果')
@@ -620,31 +636,31 @@ class PSBCTransferActivityExecutor(PSBCActivityExecutorBase):
     def _trans_child(d: u2.Device, child_xpath: str, source=None):
         return d.xpath(f'//*[@resource-id="_transeDialog"]', source).child(child_xpath)
 
-    def _get_pay_pwd_node(self, d: u2.Device):
-        _source = self._dump_hierarchy(d)
-        kb_node = d.xpath('//*[@resource-id="com.bankcomm.Bankcomm:id/digitkeypadlayout"]', _source)
-        return kb_node.get() if kb_node.exists else None
-
-    def _input_pay_pwd(self, d: u2.Device, pwd: str):
+    def _input_pay_pwd(self, d: u2.Device, pay_pwd_node: u2.xpath.XMLElement, pwd: str):
         if not pwd:
-            raise BotCategoryError(ErrorCategory.Data, '交易密码 不能为空')
-
-        pay_pwd_node: u2.xpath.XMLElement
-        pay_pwd_node = self._exec_retry('获取交易密码键盘', 20, lambda: self._get_pay_pwd_node(d))
+            raise BotCategoryError(ErrorCategory.Data, '交易密码 不能为空', is_stop=True)
         if not pay_pwd_node:
-            raise BotParseError(f'未识别到交易密码键盘信息')
-        d.sleep(2)
+            raise BotParseError(f'未识别到交易密码节点')
+
+        pay_pwd_node.click()
+        d.sleep(1)
+
         self._log('开始输入 交易密码')
+        kb_xpath = '//*[@resource-id="com.yitong.mbank.psbc:id/llayout_keyboard_panel"]'
+        pwd_kb = PSBCFullPwdKeyboard(d, kb_xpath)
+        [pwd_kb.input(_char, 0.2) for _char in pwd]
+        pwd_kb.close()
         self._log('结束输入 交易密码')
 
     def _transfer_result_check(self, d: u2.Device):
         _source = self._dump_hierarchy(d)
         if PSBCTransferResultActivityExecutor.is_current(d, _source):
             try:
-                if PSBCTransferResultActivityExecutor.is_trans_failed(d, _source):
-                    error_detail = PSBCTransferResultActivityExecutor.get_error_detail(d, _source)
+                trans_result, error_detail = PSBCTransferResultActivityExecutor.trans_result(d, _source)
+                self._log(f'转账结果: {trans_result}, {error_detail}')
+                if not trans_result:
                     raise BotCategoryError(ErrorCategory.BankWarning, error_detail)
-                if PSBCTransferResultActivityExecutor.is_trans_success(d, _source):
+                elif trans_result:
                     return True
             finally:
                 if settings.debug:
@@ -842,36 +858,6 @@ class PSBCTransactionDetailActivityExecutor(PSBCActivityExecutorBase):
                and d.xpath('//*[@resource-id="detailShow"]/*[1]/*', source).exists
 
 
-class PSBCTransferVerifyActivityExecutor(PSBCActivityExecutorBase):
-
-    def check(self, ctx: ActivityCheckContext):
-        return self.is_sms_code(ctx.d, ctx.source) or self.is_pay_pwd(ctx.d, ctx.source)
-
-    def go_back(self, ctx: ActivityExecuteContext, target_type: BotActivityType):
-        self.go_back_core(ctx.d, ctx.source)
-
-    @staticmethod
-    def _is_current(d: u2.Device, source=None, title: str = None):
-        x_title = d.xpath('//*[@resource-id="com.bankcomm.Bankcomm:id/textAuthDialogTitle"]', source)
-        return x_title.exists and StrHelper.contains(title, x_title.get_text())
-
-    @staticmethod
-    def is_sms_code(d: u2.Device, source=None):
-        return PSBCTransferVerifyActivityExecutor._is_current(d, source, '短信密码')
-
-    @staticmethod
-    def is_pay_pwd(d: u2.Device, source=None):
-        return PSBCTransferVerifyActivityExecutor._is_current(d, source, '交易密码')
-
-    @staticmethod
-    def go_back_core(d: u2.Device, source=None):
-        x_btn_back = d.xpath('//*[@resource-id="com.bankcomm.Bankcomm:id/btnAuthTopTitleBack"]', source)
-        if x_btn_back.exists:
-            x_btn_back.click()
-        else:
-            DeviceHelper.press_back(d)
-
-
 class PSBCTransferResultActivityExecutor(PSBCActivityExecutorBase):
 
     def check(self, ctx: ActivityCheckContext):
@@ -882,32 +868,23 @@ class PSBCTransferResultActivityExecutor(PSBCActivityExecutorBase):
 
     @staticmethod
     def is_current(d: u2.Device, source=None):
-        return (PSBCHelper.is_eq_title(d, source, '账号转账')
-                and (PSBCTransferResultActivityExecutor.is_trans_success(d, source)
-                     or PSBCTransferResultActivityExecutor.is_trans_failed(d, source)))
+        return PSBCHelper.is_eq_title(d, source, '转账结果') and d.xpath('//*[@resource-id="transResult"]', source).exists
 
     @staticmethod
-    def is_trans_success(d: u2.Device, source=None):
-        return d.xpath('//*[contains(@text,"转账成功")]', source).exists
-
-    @staticmethod
-    def is_trans_failed(d: u2.Device, source=None):
-        detail_msg = PSBCTransferResultActivityExecutor.get_error_detail(d, source)
-        if StrHelper.any_contains(['您密码错误', '续输入错误次数达到', '卡将被锁定', '交易密码已连续输错', '当日连续3次密码输错'], detail_msg):
-            raise BotCategoryError(ErrorCategory.Data, detail_msg, is_stop=True)
-        return (d.xpath('//*[contains(@text,"转账失败")]', source).exists
-                or StrHelper.contains('短信动态密码有误', detail_msg))
-
-    @staticmethod
-    def get_error_detail(d: u2.Device, source=None):
-        x_detail = d.xpath('//android.webkit.WebView/android.view.View[2]/*[1]', source)
-        return x_detail.get_text() if x_detail.exists else ''
+    def trans_result(d: u2.Device, source=None) -> tuple[bool, str]:
+        x_result = d.xpath('//*[@resource-id="transResult"]', source)
+        result_msg = x_result.get_text()
+        return '转账成功' in result_msg, result_msg
 
     @staticmethod
     def go_back_core(d: u2.Device, source=None):
-        x_done = d.xpath('//*[@resource-id="com.bankcomm.Bankcomm:id/web_text_right1"]', source)
+        source = source or d.dump_hierarchy()
+        x_done = d.xpath('//*[@resource-id="gotoHomePage"]', source)
+        x_home = d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/btnTopRight"]', source)
         if x_done.exists:
             x_done.click()
+        if x_home.exists:
+            x_home.click()
         else:
             PSBCHelper.go_back(d, source)
 

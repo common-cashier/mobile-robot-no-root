@@ -98,10 +98,10 @@ class Transaction:
             return False
         if self.flowNo and self.flowNo == other.flowNo:
             return True
-        return (self.time == other.time and self.name == other.name
-                and self.customerAccount == other.customerAccount and self.amount == other.amount
-                and self.balance == other.balance and self.direction == other.direction
-                and self.postscript == other.postscript)
+        return (DateTimeHelper.to_datetime(self.time) == DateTimeHelper.to_datetime(other.time)
+                and self.name == other.name and self.customerAccount == other.customerAccount
+                and self.amount == other.amount and self.balance == other.balance
+                and self.direction == other.direction and self.postscript == other.postscript)
 
     def to_dict(self, is_fen_amount=False):
         return {

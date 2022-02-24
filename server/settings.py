@@ -113,6 +113,7 @@ payment_bank = [
     'CCB',
     'CMBC',
     'BCM',
+    'PSBC',
 ]
 
 receive_bank = [
@@ -120,7 +121,7 @@ receive_bank = [
     'CCB',
     'CMBC',
     'BCM',
-    'PSBC'
+    'PSBC',
 ]
 
 

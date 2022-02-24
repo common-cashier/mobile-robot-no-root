@@ -1,6 +1,3 @@
-from datetime import datetime
-import re
-
 import uiautomator2 as u2
 
 from server.bots.act_scheduler.u2_helpers import DeviceHelper
@@ -41,7 +38,7 @@ class PSBCHelper:
     @staticmethod
     def go_back(d: u2.Device, source=None):
         x_back = d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/iv_back"]', source)
-        x_webview_back = d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/btnTopLeft"][@content-desc="返回"]', source)
+        x_webview_back = d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/btnTopLeft"]', source)
         if x_back.exists:
             x_back.click()
             return True

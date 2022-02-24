@@ -35,6 +35,10 @@ class DeviceHelper:
         return DeviceHelper.current_activity(d) == activity
 
     @staticmethod
+    def is_activity_contains(d: u2.Device, activity: str):
+        return activity in DeviceHelper.current_activity(d)
+
+    @staticmethod
     def is_in_activity(d: u2.Device, activities: List[str]):
         return DeviceHelper.current_activity(d) in activities
 

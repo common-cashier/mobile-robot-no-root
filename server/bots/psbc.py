@@ -23,6 +23,7 @@ _executors = [
     PSBCReceiptIndexActivityExecutor('receipt', BotActivityType.QueryReceipt, _act_config),
     PSBCLoginVerifyActivityExecutor('login_verify', BotActivityType.TransferResult, _act_config),
     PSBCTransactionDetailActivityExecutor('transaction_detail', BotActivityType.QueryTransDetail, _act_config),
+    PSBCTransferResultActivityExecutor('transfer_result', BotActivityType.TransferResult, _act_config),
     PSBCReceiptDetailActivityExecutor('receipt_detail', BotActivityType.QueryReceiptDetail, _act_config),
     PSBCReceiptDetailImgActivityExecutor('receipt_detail_img', BotActivityType.QueryReceiptDetailImage, _act_config),
 ]

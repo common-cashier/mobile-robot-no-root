@@ -209,7 +209,7 @@ class CMBCAccountActivityExecutor(CMBCActivityExecutorBase):
         _source = self._dump_hierarchy(ctx.d)
 
         if target_type == BotActivityType.QueryTrans:
-            x_trans_detail = ctx.d.xpath(card_info['transfer_xpath'], _source)
+            x_trans_detail = ctx.d.xpath(card_info['transaction_xpath'], _source)
             self._log(f'点击明细按钮')
             x_trans_detail.click_exists(1)
         elif target_type == BotActivityType.Transfer or target_type == BotActivityType.TransferIndex:
@@ -261,9 +261,9 @@ class CMBCAccountActivityExecutor(CMBCActivityExecutorBase):
 
             if StrHelper.contains('活期', curr_text) and next_text:
                 res['balance'] = CMBCHelper.convert_amount(next_text)
-            elif StrHelper.contains('转账', curr_text) and next_text:
+            elif StrHelper.contains('转账', curr_text):
                 res['transfer_xpath'] = curr_xpath
-            elif StrHelper.contains('明细', curr_text) and next_text:
+            elif StrHelper.contains('明细', curr_text):
                 res['transaction_xpath'] = curr_xpath
         return res
 

@@ -62,7 +62,7 @@ class BotActionScheduler:
 
             executed, need_login = False, False
             execute_action_type = action_type
-            retry_action_type, retry_limit, retry_count = None, 3, 0
+            retry_action_type, retry_limit, retry_count = None, 5, 0
             login_retry_limit = 2
             force_refresh = ForceRefreshActivity
 
@@ -103,10 +103,11 @@ class BotActionScheduler:
                     self._log(f'会话超时，待重新登录 {err.msg}')
                     need_login = True
                 except BotErrorBase as err:
-                    if BotErrorHelper.is_retryable(err) and execute_action_type != ActionType.Transfer:
-                        continue  # 重试当前操作
-                    else:
-                        raise
+                    if (execute_action_type == ActionType.Transfer and BotErrorHelper.is_logic_retry(err)) \
+                            or (execute_action_type != ActionType.Transfer and BotErrorHelper.is_retryable(err)):
+                        self._log(f'检测到异常重试: {execute_action_type}，{err.msg}')
+                        continue
+                    raise
 
                 if need_login:
                     login_retry_limit -= 1
@@ -127,7 +128,7 @@ class BotActionScheduler:
 
         none_activity_limit, none_activity_counter = 2, 0
         last_activity_type = None
-        last_activity_counter_retry, last_activity_counter = 5, 0
+        last_activity_counter_wait, last_activity_counter = 5, 0
 
         ctx_check = ActivityCheckContext(self.d)
         ctx_execute = ActivityExecuteContext(self.d, self.account)
@@ -138,7 +139,7 @@ class BotActionScheduler:
         while True:
             loop_limit -= 1
             if loop_limit < 0:
-                raise BotParseError('检查当前页面次数达到限制，疑似页面执行有互相依赖')
+                raise BotParseError('检查当前页面次数达到限制，疑似页面流转不正确')
 
             self._reset_ctx(ctx_check, ctx_execute)
 
@@ -173,14 +174,16 @@ class BotActionScheduler:
                 break
 
             if last_activity_type == current_executor.activity_type:
-                self._log(f'仍停留在页面: {last_activity_type}')
-                if last_activity_counter < last_activity_counter_retry:
+                if last_activity_counter < last_activity_counter_wait:
                     last_activity_counter += 1
-                    self.d.sleep(1)  # 等待后继续
+                    self._log(f'仍停留在页面: {last_activity_type}，第 {last_activity_counter} 次重试等待')
+                    self.d.sleep(1)
                     continue
-            else:
-                last_activity_counter = 0
-                last_activity_type = current_executor.activity_type
+                else:
+                    self._log(f'仍停留在页面: {last_activity_type}，再次操作流程处理')
+
+            last_activity_counter = 0
+            last_activity_type = current_executor.activity_type
 
             curr_exec_name = current_executor.name
             self._log(f'当前页面执行类: {curr_exec_name}, {current_executor.__class__.__name__}')
