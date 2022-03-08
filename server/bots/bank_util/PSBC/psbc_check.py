@@ -37,6 +37,12 @@ class PSBCErrorChecker:
                 common_log(f'提示更新: 暂不更新')
                 return True, None
 
+        ad_close = d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/iv_cross_marketing_close"]', source)
+        if ad_close.exists:
+            ad_close.click()
+            common_log(f'提示广告: 关闭')
+            return True, None
+
         x_safe_dialog = d.xpath('//*[@resource-id="_safeDialog"]', source)
         if x_safe_dialog.exists:
             safe_dialog_xpath = x_safe_dialog.get().get_xpath()

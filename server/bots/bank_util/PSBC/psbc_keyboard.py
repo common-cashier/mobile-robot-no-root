@@ -18,7 +18,7 @@ class KeyboardType(enum.IntEnum):
 class PSBCNumberKeyboard:
 
     def __init__(self, d: u2.Device, source: str = None):
-        x_keyboard = d.xpath('com.yitong.mbank.psbc:id/llayout_keyboard_panel', source)
+        x_keyboard = d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/llayout_keyboard_panel"]', source)
         if not x_keyboard.exists:
             raise BotParseError('未找到 键盘 节点')
 

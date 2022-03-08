@@ -554,7 +554,7 @@ class CMBCTransferActivityExecutor(CMBCActivityExecutorBase):
         try:
             self._log(f'检查转账结果')
             self._exec_retry('检查转账结果', 60, lambda: self._transfer_result_check(d))
-        except BotErrorBase as err:  # 识别到的转账失败异常
+        except BotTransferFailedError as err:  # 识别到的转账失败异常
             self._log(f'检查转账结果失败: {err.msg}')
             return False, f'转账失败，{err.msg}'
         except Exception as ex:  # 未识别异常，乐观处理
@@ -627,8 +627,8 @@ class CMBCTransferActivityExecutor(CMBCActivityExecutorBase):
             self._log(f'错误提示: {msg}')
             d.xpath('//*[@resource-id="cn.com.cmbc.newmbank:id/tv_cancel"]').click_exists(2)
             if StrHelper.contains('交易密码', msg):
-                raise BotCategoryError(ErrorCategory.BankWarning, msg, is_stop=True)
-            raise BotCategoryError(ErrorCategory.BankWarning, msg)
+                raise BotTransferFailedError(msg, is_stop=True)
+            raise BotTransferFailedError(msg)
 
         return False
 

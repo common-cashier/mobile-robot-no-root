@@ -2,7 +2,8 @@ import enum
 from enum import auto
 
 __all__ = ['ErrorCategory', 'BotErrorMsg', 'BotErrorBase', 'BotStopError', 'BotCategoryError', 'BotParseError',
-           'BotSessionExpiredError', 'BotRunningError', 'BotLogicRetryError', 'BotErrorHelper']
+           'BotSessionExpiredError', 'BotRunningError', 'BotTransferFailedError', 'BotLogicRetryError',
+           'BotErrorHelper']
 
 
 @enum.unique
@@ -79,6 +80,9 @@ class BotSessionExpiredError(BotErrorBase):
 
 class BotRunningError(BotErrorBase):
     pass
+
+
+class BotTransferFailedError(BotErrorBase):
 
 
 class BotLogicRetryError(BotErrorBase):

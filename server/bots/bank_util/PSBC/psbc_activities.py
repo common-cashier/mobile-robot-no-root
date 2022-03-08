@@ -62,7 +62,7 @@ class PSBCActivityExecutorBase(BotActivityExecutor):
         source = source or self._dump_hierarchy(d)
         x_load = d.xpath('//*[@resource-id="time-list-loadmore-text"]', source)
         if x_load.exists and StrHelper.contains('正在加载', x_load.get_text()):
-            return False
+            return True
         loading_xpath = '//*[@resource-id="com.yitong.mbank.psbc:id/progress_dialog_tv"]'
         x_loading = d.xpath(loading_xpath, source)
         return x_loading.exists and StrHelper.contains('交易正在处理', x_loading.get_text())
@@ -86,7 +86,7 @@ class PSBCActivityExecutorBase(BotActivityExecutor):
 
 
 class PSBCMainActivityExecutor(PSBCActivityExecutorBase):
-    _main_activity = ['com.yitong.mbank.psbc.android.activity.MainActivity']
+    _main_activity = ['com.yitong.mbank.psbc.android.activity.MainActivity', '.android.activity.MainActivity']
 
     def check(self, ctx: ActivityCheckContext):
         return StrHelper.any_contains(self._main_activity, ctx.current_activity)
@@ -106,7 +106,7 @@ class PSBCMainActivityExecutor(PSBCActivityExecutorBase):
 
 
 class PSBCLoginActivityExecutor(PSBCActivityExecutorBase):
-    _login_activity = ['com.yitong.mbank.psbc.android.activity.LoginActivity']
+    _login_activity = ['com.yitong.mbank.psbc.android.activity.LoginActivity', '.android.activity.LoginActivity']
     _re_exist_name = re.compile(r'(\d+\**\d+)')
 
     def check(self, ctx: ActivityCheckContext):
@@ -569,7 +569,7 @@ class PSBCTransferActivityExecutor(PSBCActivityExecutorBase):
         try:
             self._log(f'检查转账结果')
             self._exec_retry('检查转账结果', 60, lambda: self._transfer_result_check(d))
-        except BotErrorBase as err:
+        except BotTransferFailedError as err:
             self._log(f'检查转账结果失败: {err.msg}')
             return False, f'转账失败，{err.msg}'
         except Exception as ex:
@@ -600,6 +600,7 @@ class PSBCTransferActivityExecutor(PSBCActivityExecutorBase):
         if usable_amt < trans_amount:
             msg = f'可用余额 {usable_amt} 小于转账余额 {trans_amount}'
             self._log(f'取消转账: {msg}')
+            raise BotCategoryError(ErrorCategory.BankWarning, msg)
 
         self._log(f'输入转账金额')
         while True:

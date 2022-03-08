@@ -74,6 +74,7 @@ bank_map = {
     'PSBC': '中国邮政储蓄银行',
     'BOS': '上海银行',
     'JSBK': '江苏银行股份有限公司',
+    'HARBINBANK': '哈尔滨银行',
 }
 
 sms_bank = {
@@ -86,6 +87,7 @@ sms_bank = {
     'CMBC': r'民生银行',
     'BCM': r'【交通银行】$',
     'PSBC': r'^【邮储银行】',
+    'HARBINBANK': r'(^【哈尔滨银行】|哈行|验证码)',
 }
 
 api = {

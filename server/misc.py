@@ -7,7 +7,7 @@ import time as t
 import requests
 import logging as logger
 
-from aes import encrypt, decrypt
+from server.aes import encrypt, decrypt
 from server import settings
 from server.settings import api, log, sms_bank, Level
 

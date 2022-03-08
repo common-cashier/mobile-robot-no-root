@@ -31,6 +31,7 @@ class BotActivityType(Enum):
     TransferIndex = auto()
     TransferConfirm = auto()
     TransferVerify = auto()
+    TransferResultTransition = auto()
     TransferResult = auto()
     QueryReceiptTransition = auto()
     QueryReceipt = auto()

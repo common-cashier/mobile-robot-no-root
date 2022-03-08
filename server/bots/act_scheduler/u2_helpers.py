@@ -1,5 +1,5 @@
 import base64
-from typing import List
+from typing import List, Union, Optional
 
 import uiautomator2 as u2
 
@@ -9,6 +9,48 @@ __all__ = ['DeviceHelper', 'XPathHelper']
 
 
 class DeviceHelper:
+    __can_fastinput: Optional[bool] = None
+
+    @staticmethod
+    def _can_fastinput(d: u2.Device):
+        if DeviceHelper.__can_fastinput is not None:
+            return DeviceHelper.__can_fastinput
+
+        try:
+            d.wait_fastinput_ime(timeout=5)
+            DeviceHelper.__can_fastinput = True
+        except EnvironmentError:
+            DeviceHelper.__can_fastinput = False
+        return DeviceHelper.__can_fastinput
+
+    @staticmethod
+    def set_text(d: u2.Device, selector: Union[u2.xpath.XPathSelector, u2.xpath.XMLElement, str], text: str,
+                 delay: float = 0, swipe_up: float = 0, close_kb=False, single_input=False):
+        if isinstance(selector, u2.xpath.XPathSelector):
+            selector.click()
+        elif isinstance(selector, u2.xpath.XMLElement):
+            selector.click()
+        elif isinstance(selector, str):
+            d.xpath(selector).click()
+        else:
+            raise BotRunningError(f'不支持 {selector} 节点类型输入文本')
+        if delay > 0:
+            d.sleep(delay)
+        if swipe_up > 0:
+            d.swipe_ext(direction='up', scale=swipe_up)
+        DeviceHelper.send_keys(d=d, text=text, close_kb=close_kb, single_input=single_input)
+
+    @staticmethod
+    def send_keys(d: u2.Device, text: str, close_kb=False, single_input=False):
+        input_texts = [text] if not single_input else [DeviceHelper.send_keys(d, _t) for _t in text]
+        can_fastinput = DeviceHelper._can_fastinput(d)
+        if can_fastinput:
+            [d.send_keys(_t) for _t in input_texts]
+        else:
+            [d(focused=True).set_text(_t) for _t in input_texts]
+        if close_kb:
+            DeviceHelper.press_back(d)
+
     @staticmethod
     def is_installed_pkg(d: u2.Device, package_name: str):
         return package_name in d.app_list(package_name)
@@ -108,7 +150,7 @@ class DeviceHelper:
                 success = True
                 break
             elif had_clear or exist_text == '':
-                x_input.set_text(text)
+                DeviceHelper.set_text(d, x_input, text)
             else:
                 had_clear = True
                 x_input.click()
@@ -144,11 +186,6 @@ class DeviceHelper:
                     x_input.click()
                     d.clear_text()
             d.sleep(1)
-
-    @staticmethod
-    def ele_set_text(d: u2.Device, ele: u2.xpath.XMLElement, text: str):
-        ele.click()
-        d.xpath.send_text(text)
 
     @staticmethod
     def screenshot_base64(d: u2.Device):

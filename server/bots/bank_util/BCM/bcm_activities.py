@@ -104,7 +104,7 @@ class BCMLoginActivityExecutor(BCMActivityExecutorBase):
         ele_pwd = text_nodes[1]
 
         self._log('输入手机号')
-        DeviceHelper.ele_set_text(d, ele_mobile, account.login_name)
+        DeviceHelper.set_text(d, ele_mobile, account.login_name)
 
         pwd_retry_limit, done_login = 2, False
         while not done_login and pwd_retry_limit > 0:
@@ -447,7 +447,7 @@ class BCMTransferActivityExecutor(BCMActivityExecutorBase):
         if usable_amt < trans_amount:
             msg = f'可用余额 {usable_amt} 小于转账余额 {trans_amount}'
             self._log(f'取消转账: {msg}')
-            raise BotCategoryError(ErrorCategory.Data, msg)
+            raise BotCategoryError(ErrorCategory.BankWarning, msg)
 
         d.swipe_ext(direction='up', scale=0.7)
         d.sleep(1)
@@ -497,7 +497,7 @@ class BCMTransferActivityExecutor(BCMActivityExecutorBase):
         try:
             self._log(f'检查转账结果')
             self._exec_retry('检查转账结果', 60, lambda: self._transfer_result_check(d))
-        except BotErrorBase as err:
+        except BotTransferFailedError as err:
             self._log(f'检查转账结果失败: {err.msg}')
             return False, f'转账失败，{err.msg}'
         except Exception as ex:
@@ -546,7 +546,7 @@ class BCMTransferActivityExecutor(BCMActivityExecutorBase):
             try:
                 if BCMTransferResultActivityExecutor.is_trans_failed(d, _source):
                     error_detail = BCMTransferResultActivityExecutor.get_error_detail(d, _source)
-                    raise BotCategoryError(ErrorCategory.BankWarning, error_detail)
+                    raise BotTransferFailedError(error_detail)
                 if BCMTransferResultActivityExecutor.is_trans_success(d, _source):
                     return True
             finally:
@@ -770,7 +770,7 @@ class BCMTransferResultActivityExecutor(BCMActivityExecutorBase):
     def is_trans_failed(d: u2.Device, source=None):
         detail_msg = BCMTransferResultActivityExecutor.get_error_detail(d, source)
         if StrHelper.any_contains(['您密码错误', '续输入错误次数达到', '卡将被锁定', '交易密码已连续输错', '当日连续3次密码输错'], detail_msg):
-            raise BotCategoryError(ErrorCategory.Data, detail_msg, is_stop=True)
+            raise BotTransferFailedError(detail_msg, is_stop=True)
         return (d.xpath('//*[contains(@text,"转账失败")]', source).exists
                 or StrHelper.contains('短信动态密码有误', detail_msg))
 
