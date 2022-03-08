@@ -12,6 +12,7 @@ __all__ = ['BCMActionWatcher', 'BCMErrorChecker']
 
 
 class BCMActionWatcher(BotActionWatcher):
+    """执行全局监听检查，跳转页面过程中处理"""
 
     def check(self, ctx: ActivityCheckContext) -> bool:
         result, _ = BCMErrorChecker.check(ctx.d, ctx.source)
@@ -19,19 +20,30 @@ class BCMActionWatcher(BotActionWatcher):
 
 
 class BCMErrorChecker:
+    """运行错误检查"""
 
     @staticmethod
     def check(d: u2.Device, source=None, prior_func: Callable[[str], bool] = None) -> (bool, str):
+        """
+        检查错误
+        True 为有错误并已处理(外部需要重刷页面进行处理)
+        False 为无错误
+        Error 为自定义异常，外部拦截处理
+        """
+        # 主页活动提示
         x_popup_close = d.xpath('//*[@resource-id="com.bankcomm.Bankcomm:id/popup_close"]', source)
         if x_popup_close.exists:
             settings.log(f'检测到活动提示')
             x_popup_close.click()
             return True, '检测到活动提示'
 
+        # 转账交易密码键盘出错
         x_alert_title = d.xpath('//*[@resource-id="com.bankcomm.Bankcomm:id/tvCommonAlertTitle"]', source)
         if x_alert_title.exists and x_alert_title.get_text():
             try:
+                # 安全控件创建失败
                 error_msg = x_alert_title.get_text()
+                # 错误信息 : java.lang.NullPointerException: Attempt to invoke interface method ...
                 x_alert_attach = d.xpath('//*[@resource-id="com.bankcomm.Bankcomm:id/tvCommonAlertAttach"]', source)
                 error_detail = x_alert_attach.get_text() if x_alert_attach.exists else ''
                 settings.log(f'检测到转账失败提示：{error_msg}，详情：{error_detail}')
@@ -39,12 +51,16 @@ class BCMErrorChecker:
             finally:
                 d.xpath('//*[@resource-id="com.bankcomm.Bankcomm:id/lbtCommonAlertOK"]', source).click_exists(0.1)
 
+        # H5 Toast 提示，几秒后自动消失
         x_toast_tips = d.xpath('//android.webkit.WebView/*[last()][string-length(@text)>0]', source)
         if x_toast_tips.exists:
             error_msg = x_toast_tips.get_text()
+            # settings.log(f'检测到银行提示: {error_msg}')
+            # 用户名或密码错误，&lt;br&gt;请重新输入
             if StrHelper.contains('用户名或密码错误', error_msg):
                 raise BotCategoryError(ErrorCategory.Data, msg=error_msg, is_stop=True)
 
+        # H5弹框提示 - 继续转账
         tips_continue_xpath = '//android.app.Dialog//android.widget.Button[@text="继续转账"]'
         x_tips_continue = d.xpath(tips_continue_xpath, source)
         if x_tips_continue.exists:
@@ -53,10 +69,13 @@ class BCMErrorChecker:
                 error_msg = x_tips_text.get_text() if x_tips_text.exists else ''
                 settings.log(f'检测到转账提示: {error_msg}')
 
+                # 尊敬的用户，您于2022-02-01 12:54:55已成功向同一收款人转出相同金额的款项。请确认是否要继续转账？
                 return True, error_msg
             finally:
+                # 关闭提示
                 x_tips_continue.click_exists(0.1)
 
+        # H5弹框提示
         tips_close_xpath = '//android.app.Dialog//android.widget.Button[@text="关闭"]'
         x_tips_close = d.xpath(tips_close_xpath, source)
         if x_tips_close.exists:
@@ -65,15 +84,24 @@ class BCMErrorChecker:
                 error_msg = x_tips_text.get_text() if x_tips_text.exists else ''
                 settings.log(f'检测到银行提示: {error_msg}')
 
+                # 如果前置函数已处理，则不做错误提示
                 if prior_func is not None and prior_func(error_msg):
                     return False, error_msg
 
+                # 会话超时，会自动跳转到登录页
                 if StrHelper.contains('服务器在忙', error_msg):
                     raise BotCategoryError(ErrorCategory.Network, error_msg)
                 if StrHelper.contains('网络环境不佳', error_msg):
                     raise BotCategoryError(ErrorCategory.Network, error_msg, is_stop=True)
+                """
+                服务器在忙，请重新输入登录密码。
+                服务器在忙,请退出后再试
+                网络环境不佳，请切换网络后再试。
+                """
+                # raise BotCategoryError(ErrorCategory.BankWarning, error_msg)
                 return True, error_msg
             finally:
+                # 关闭提示
                 x_tips_close.click_exists(0.1)
 
         return False, None

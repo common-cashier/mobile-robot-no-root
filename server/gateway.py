@@ -1,9 +1,11 @@
+# coding: utf-8
 import sys
 from builtins import ConnectionRefusedError
 
 import uiautomator2 as u2
 from flask import Flask, request
 
+# 添加上级目录，用于查找 server 包
 sys.path.append('..')
 
 from server import settings, api
@@ -15,6 +17,10 @@ from server.bot_factory import BotFactory
 app = Flask(__name__)
 global rsp
 
+"""
+测试接口
+params：none
+"""
 
 
 @app.route('/', methods=['GET'])
@@ -23,6 +29,10 @@ def hello():
     return "hello world"
 
 
+"""
+检查安装环境
+params：none
+"""
 
 
 @app.route('/check_evn', methods=['GET'])
@@ -42,6 +52,10 @@ def check():
     return rsp
 
 
+"""
+短信上报完成付款接口
+params：sms
+"""
 
 
 @app.route('/sms', methods=['POST'])
@@ -78,6 +92,16 @@ def sms():
             return ext
 
 
+"""
+启动前置检查及信息获取
+params：
+baseURL 接口前缀
+serialNo 手机序列号
+kind 支付种类 
+bank 银行
+account_alias 银行别名
+devices_id 阿里控制ID
+"""
 
 
 @app.route('/start', methods=['POST'])
@@ -103,6 +127,16 @@ def start():
                     log("check_bank: %s" % res)
                     return res
             log("check_bank: is supported")
+            # 假数据
+            # data = {
+            #     "accountAlias": "中国银行-BOC(徐秀策)-4249）",
+            #     "loginName": "18648890160",
+            #     "loginPassword": "aa080706",
+            #     "paymentPassword": "080706",
+            #     "ukeyPassword": "080706",
+            #     "bank": "BOC"
+            # }
+            # data_obj = convert(data=data)
 
             bot_factory = BotFactory()
             bot_util.cast_transaction = bot_factory.cast_transaction
@@ -128,6 +162,12 @@ def start():
         return {'code': 0, 'msg': '启动成功', 'data': rsp}
 
 
+"""
+执行指定工作
+params：
+do_work: start 启动和操控App
+do_work: stop 关闭所有卡机应用
+"""
 
 
 @app.route('/do_work', methods=['POST'])

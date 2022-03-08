@@ -9,6 +9,7 @@ __all__ = ['DeviceHelper', 'XPathHelper']
 
 
 class DeviceHelper:
+    # 是否可用 fastInput，None 未知，True 可用，False 不可用
     __can_fastinput: Optional[bool] = None
 
     @staticmethod
@@ -26,6 +27,16 @@ class DeviceHelper:
     @staticmethod
     def set_text(d: u2.Device, selector: Union[u2.xpath.XPathSelector, u2.xpath.XMLElement, str], text: str,
                  delay: float = 0, swipe_up: float = 0, close_kb=False, single_input=False):
+        """聚焦节点并输入文本
+
+        :param d: Device
+        :param selector: 支持多种节点类型
+        :param text: 输入文本
+        :param delay: 点击节点后延迟输入文本
+        :param swipe_up: 点击节点后向上滑动比例，使用非fastinput输入时，元素可能会被遮挡
+        :param close_kb: 输入完成后是否关闭键盘
+        :param single_input: 文本是否单个字符输入
+        """
         if isinstance(selector, u2.xpath.XPathSelector):
             selector.click()
         elif isinstance(selector, u2.xpath.XMLElement):
@@ -42,12 +53,22 @@ class DeviceHelper:
 
     @staticmethod
     def send_keys(d: u2.Device, text: str, close_kb=False, single_input=False):
-        input_texts = [text] if not single_input else [DeviceHelper.send_keys(d, _t) for _t in text]
+        """输入文本
+
+        :param d: Device
+        :param text: 输入文本
+        :param close_kb: 输入完成后是否关闭键盘
+        :param single_input: 文本是否单个字符输入
+        """
+        input_texts = [text] if not single_input else [_t for _t in text]
+        # 检查输入键盘类型，使用缓存。避免部分机型无法切换输入法
         can_fastinput = DeviceHelper._can_fastinput(d)
         if can_fastinput:
             [d.send_keys(_t) for _t in input_texts]
         else:
+            # 同一文本节点单独输入时，会清空之前内容。仅对多个文本框自动切换时生效(例如:短信验证码)
             [d(focused=True).set_text(_t) for _t in input_texts]
+        # 关闭键盘，点击返回
         if close_kb:
             DeviceHelper.press_back(d)
 
@@ -89,13 +110,16 @@ class DeviceHelper:
         had_move = False  # move once will be True
         max_move = win_height / float(2)  # center height
         while move_height > 0:
+            # print(f'swipe_up_until - remain: {move_height}')
             move = min(max_move, move_height)
             scale = move / float(max_move)
             if scale < 0.03:
+                # print(f'swipe_up_until - ignore swipe: {move}/{max_move}')
                 break
             else:
                 had_move = True
 
+            # list_ele.swipe('up', scale)
             d.swipe_ext('up', scale)
             move_height -= move
         return had_move
@@ -136,7 +160,9 @@ class DeviceHelper:
 
     @staticmethod
     def input_correct(d: u2.Device, _xpath: str, text: str, hierarchy_func=None, ignore_str=' '):
+        # 保证卡号输入正确，因之前有输入卡号时，再次输入时可能会清空失败，需要多次清空才生效
         retry_limit = 5
+        # 清空一次即可，避免h5中placeholder不能清除
         success, had_clear = False, False
         while retry_limit >= 0:
             retry_limit -= 1
@@ -150,11 +176,14 @@ class DeviceHelper:
                 success = True
                 break
             elif had_clear or exist_text == '':
+                # x_input.set_text(text)
                 DeviceHelper.set_text(d, x_input, text)
             else:
+                # print(f'[输入文本检查] 清空已输入文本: {exist_text}')
                 had_clear = True
                 x_input.click()
                 d.clear_text()
+            # 过快会导致 dump 卡住
             d.sleep(1)
         if not success:
             raise BotRunningError('[输入文本检查] 重试次数过多')
@@ -170,6 +199,7 @@ class DeviceHelper:
 
     @staticmethod
     def input_clear(d: u2.Device, _xpath: str, hierarchy_func=None, ignore_str=' ', clear_func=None):
+        # 保证卡号输入正确，因之前有输入卡号时，再次输入时可能会清空失败，需要多次清空才生效
         while True:
             dump_source = d.dump_hierarchy() if hierarchy_func is None else hierarchy_func(d=d)
             x_input = d.xpath(_xpath, dump_source)
@@ -180,11 +210,13 @@ class DeviceHelper:
             if not exist_text.replace(ignore_str, ''):
                 break
             else:
+                # print(f'[清空文本检查] 清空已输入文本: {exist_text}')
                 if clear_func:
                     clear_func(text=exist_text)
                 else:
                     x_input.click()
                     d.clear_text()
+            # 过快会导致 dump 卡住
             d.sleep(1)
 
     @staticmethod
@@ -198,6 +230,7 @@ class DeviceHelper:
 
 
 class XPathHelper:
+    """xpath 帮助类"""
 
     @staticmethod
     def get_first_child(d: u2.Device, parent_xpath: str, source: str = None):
@@ -205,6 +238,11 @@ class XPathHelper:
 
     @staticmethod
     def get_all_texts(d: u2.Device, parent_xpath: str, source: str = None, filters=None) -> List[tuple[str, str]]:
+        """获取 xpath 包含 text 或 content-desc 的所有子节点数据
+
+        :return: list[tuple], item0 为子节点xpath，item1 为子节点文本
+        """
+        # 包含数据的所有子节点
         had_text_xpath = '//*[string-length(@text)>0 or string-length(@content-desc)>0]'
         nodes = d.xpath(parent_xpath, source).child(had_text_xpath).all()
         result = []

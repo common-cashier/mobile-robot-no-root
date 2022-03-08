@@ -1,6 +1,7 @@
 import os
 import unittest
 
+# use root
 os.chdir('../../')
 
 from server.bots.bank_util.BCM.recognize import RecognizeNumber

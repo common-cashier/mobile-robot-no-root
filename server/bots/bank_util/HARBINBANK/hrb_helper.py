@@ -13,6 +13,8 @@ class HRBHelper:
     @staticmethod
     def get_title(d: u2.Device, source=None) -> [bool, str]:
         title = None
+        # com.yitong.hrb.people.android.activity.WebActivity
+        # webview 标题
         x_title = d.xpath('//*[@resource-id="com.yitong.hrb.people.android:id/ivLogo"]', source)
         if x_title.exists:
             ele_title = x_title.get()
@@ -45,6 +47,8 @@ class HRBHelper:
 
     @staticmethod
     def go_back(d: u2.Device, source=None):
+        """优先点击顶部返回，避免键盘仍处于打开状态等"""
+        #
         x_back = d.xpath('//*[@resource-id="com.yitong.hrb.people.android:id/iv_back_login"]', source)
         x_webview_back = d.xpath('//*[@resource-id="com.yitong.hrb.people.android:id/iv_back"]', source)
         if x_back.exists:

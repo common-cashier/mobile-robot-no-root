@@ -39,6 +39,7 @@ class RetryHelper:
             except Exception as err:
                 if callback is None:
                     raise err
+                # 异常回调
                 callback_result = callback(error=err)
                 if not callback_result:
                     raise err
@@ -53,6 +54,7 @@ class RetryHelper:
 
 
 class StrHelper:
+    """字符串帮助类"""
 
     @staticmethod
     def contains(search, full) -> bool:
@@ -60,6 +62,7 @@ class StrHelper:
 
     @staticmethod
     def any_contains(searches: List[str], full) -> bool:
+        """包含字符串列表任意一项"""
         for _s in searches:
             if _s in full:
                 return True
@@ -85,6 +88,7 @@ class StrHelper:
 
 
 class NumericHelper:
+    """数字相关帮助类"""
 
     @staticmethod
     def multiply_to_int(num: Union[float, str], multiplier: float) -> int:
@@ -96,6 +100,7 @@ class NumericHelper:
 
 
 class DateTimeHelper:
+    """日期帮助类"""
 
     @staticmethod
     def now_str(_format='%Y/%m/%d %H:%M:%S') -> str:
@@ -103,19 +108,26 @@ class DateTimeHelper:
 
     @staticmethod
     def to_str(dt, _format='%Y/%m/%d %H:%M:%S') -> str:
+        """格式化为 str 类型"""
         dt = DateTimeHelper.to_datetime(dt)
         return datetime.strftime(dt, _format)
 
     @staticmethod
     def to_datetime(_time, _format=None) -> datetime:
+        """转换为 datetime 类型"""
         if isinstance(_time, datetime):
             return _time
         if isinstance(_time, str):
             if _format is None:
+                # 默认识别两种格式
                 _format = '%Y/%m/%d %H:%M:%S' if '/' in _time else '%Y-%m-%d %H:%M:%S'
             return datetime.strptime(_time, _format)
 
     @staticmethod
     def timestamp(_dt=None, seconds=True) -> int:
+        """时间戳
+        `_dt` 时间值，None 表示获取当前时间
+        `seconds` True 为秒格式，False 为毫秒格式
+        """
         now = DateTimeHelper.to_datetime(_dt) if _dt else datetime.now()
         return int(now.timestamp() if seconds else now.timestamp() * 10 ** 3)

@@ -10,6 +10,8 @@ class PSBCHelper:
     @staticmethod
     def get_title(d: u2.Device, source=None) -> [bool, str]:
         title = None
+        # com.yitong.mbank.psbc.utils.webview.WebViewActivity
+        # webview 标题
         x_title = d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/tvTopTextTitle"]', source)
         if x_title.exists:
             ele_title = x_title.get()
@@ -37,7 +39,9 @@ class PSBCHelper:
 
     @staticmethod
     def go_back(d: u2.Device, source=None):
+        """优先点击顶部返回，避免键盘仍处于打开状态等"""
         x_back = d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/iv_back"]', source)
+        # [@content-desc="返回"]
         x_webview_back = d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/btnTopLeft"]', source)
         if x_back.exists:
             x_back.click()

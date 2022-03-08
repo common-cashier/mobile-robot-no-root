@@ -18,12 +18,21 @@ from server.bots.bank_util.HARBINBANK.hrb_keyboard import *
 from server.bots.bank_util.HARBINBANK.hrb_helper import *
 from server.bots.bank_util.HARBINBANK.hrb_check import *
 
+"""
+开发 APP 信息
+- 版本 4.1.5
+"""
 
 _package = 'com.yitong.hrb.people.android'
 
 
 class HRBActivityExecutorBase(BotActivityExecutor):
     def _dump_hierarchy(self, d, check_error=True):
+        """
+        加载结构，使用代理类检查页面是否有错误
+
+        :param check_error: 是否检查错误
+        """
         retry_limit = 5
         while True:
             source = super()._dump_hierarchy(d, check_error=check_error)
@@ -53,26 +62,33 @@ class HRBActivityExecutorBase(BotActivityExecutor):
         return False, None
 
     def _wait_loading(self, d: u2.Device):
+        """等待加载完成 或 抛出异常"""
         _r = self._exec_retry('等待加载完成', retry_limit=60, interval_second=1,
                               func=lambda: not self._is_loading(d))
         if not _r:
             raise BotParseError('加载页面失败，一直提示加载中')
 
     def _is_loading(self, d: u2.Device, source: str = None):
+        """是否为请求后台加载中"""
         source = source or self._dump_hierarchy(d)
         x_load = d.xpath('//*[@resource-id="com.yitong.hrb.people.android:id/tvProgress"]', source)
+        # 加载中...
         return x_load.exists and StrHelper.contains('加载', x_load.get_text())
 
     def go_back(self, ctx: ActivityExecuteContext, target_type: BotActivityType):
         self._tooltip_back(ctx.d, ctx.source)
 
     def _tooltip_back(self, d: u2.Device, _source: str = None, wait_second: float = 0):
+        """
+        优先点击顶部返回，避免键盘仍处于打开状态等
+        """
         _source = _source or self._dump_hierarchy(d)
         is_toolbar_back = HRBHelper.go_back(d, _source)
         if is_toolbar_back:
             self._log(f'点击页面返回')
         else:
             self._log(f'点击手机返回')
+        # 连续点击返回，只会生效一次
         if wait_second:
             d.sleep(wait_second)
 
@@ -87,14 +103,14 @@ class HRBMainActivityExecutor(HRBActivityExecutorBase):
         account_xpath = '//*[@resource-id="com.yitong.hrb.people.android:id/tv_menu"][@text="我的账户"]'
         x_account = ctx.d.xpath(account_xpath, ctx.source)
         if not x_account.exists:
+            # 先进入 首页 Tab
             ctx.d.xpath('//*[@resource-id="com.yitong.hrb.people.android:id/tv_home"][@text="首页"]').click_exists(1)
             ctx.d.sleep(1)
+            # 下次使用时，重新加载页面结构
             ctx.reset()
 
         if target_type == BotActivityType.Login or target_type == BotActivityType.QueryAccount:
             ctx.d.xpath(account_xpath, ctx.source).click_exists(1)
-        elif target_type == BotActivityType.TransferIndex:
-            ctx.d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/llSmartTransfer"][@text="智能转账"]').click_exists(1)
 
 
 class HRBLoginActivityExecutor(HRBActivityExecutorBase):
@@ -104,10 +120,14 @@ class HRBLoginActivityExecutor(HRBActivityExecutorBase):
         return StrHelper.any_contains(self._login_activity, ctx.current_activity)
 
     def execute(self, ctx: ActivityExecuteContext, *args, **kwargs):
+        """执行登录
+        1. 已登录成功时，不显示`登录账号`文本框，仅支持与录入登录账号匹配时
+        """
         self._log('进入登录页')
         account = ctx.account
         d = ctx.d
 
+        # 已登录账号时，显示账号可能会很慢
         _r = self._exec_retry('检查登录账号', retry_limit=60, func=lambda: self._check_exist_name(d))
         if not _r:
             raise BotParseError('未检测到已登录账号，请先手动登录成功')
@@ -124,6 +144,7 @@ class HRBLoginActivityExecutor(HRBActivityExecutorBase):
         if self._exec_retry('登录结果检查', retry_limit=60, func=lambda: self._login_result_check(d)):
             self._log('登录成功')
         else:
+            # 避免多次重登锁卡，未登录成功，则强制停止
             raise BotParseError('未检查到登录结果', is_stop=True)
 
     def _input_pwd(self, d: u2.Device, login_pwd: str) -> bool:
@@ -131,6 +152,7 @@ class HRBLoginActivityExecutor(HRBActivityExecutorBase):
         self._log('点击密码框')
         d.xpath(pwd_xpath).click()
         d.sleep(0.5)
+        # 先清空已输入账号 再输入
         d.xpath('//*[@resource-id="com.yitong.hrb.people.android:id/iv_clear_pwd"]').click_exists(0.1)
         kb = HRBLoginPwdKeyboard(d)
         [kb.input(_t, 0.2) for _t in login_pwd]
@@ -139,8 +161,10 @@ class HRBLoginActivityExecutor(HRBActivityExecutorBase):
         return len(input_text) == len(login_pwd)
 
     def _login_result_check(self, d: u2.Device):
+        # 跳转页面，表示成功
         if not DeviceHelper.is_in_activity(d, self._login_activity):
             return True
+        # 检查错误
         self._dump_hierarchy(d)
         return False
 
@@ -186,8 +210,10 @@ class HRBAccountActivityExecutor(HRBActivityExecutorBase):
             x_transfer.click_exists(1)
 
     def _get_card_info(self, ctx: ActivityExecuteContext, **_) -> dict:
+        """获取银行卡信息"""
         d = ctx.d
 
+        # accountTpl_0
         x_card_list = d.xpath('//*[@resource-id="acctList"]//*[starts-with(@resource-id, "accountTpl")]')
         x_card_list.wait(20)
         _source = self._dump_hierarchy(d)
@@ -206,6 +232,7 @@ class HRBAccountActivityExecutor(HRBActivityExecutorBase):
     @staticmethod
     def _parse_account(d: u2.Device, item_xpath: str, source: str = None):
         res = {'item_xpath': item_xpath, }
+        # 默认_Ⅰ类户_6217 **** **** 1234_可用余额_21.07_元_智能转账_交易明细_定期存款_
         child_texts = XPathHelper.get_all_texts(d, item_xpath, source)
         child_len = len(child_texts)
         for i in range(child_len):
@@ -215,8 +242,10 @@ class HRBAccountActivityExecutor(HRBActivityExecutorBase):
                 next_text, next_xpath = child_texts[i + 1]
 
             if next_text and StrHelper.contains('余额', next_text):
+                # 可用余额 的上一个节点
                 res['card_mask'] = HRBHelper.get_card_no(curr_text)
             elif StrHelper.contains('余额', curr_text) and next_text:
+                # 可用余额 的下一个节点
                 balance_text = next_text
                 if balance_text == '—.——':
                     raise BotLogicRetryError('未获取到余额，需等待重试')
@@ -229,12 +258,17 @@ class HRBAccountActivityExecutor(HRBActivityExecutorBase):
 
 
 class HRBTransactionActivityExecutor(HRBActivityExecutorBase):
+    # 去重列表
     _distinct_list = DistinctList()
+    # 查询流水终止条件
     _last_trans: Transaction
     _max_query_count: int
     _start_time: datetime
+    # 最后一项流水项高度，避免滑过导致流水丢失
     _last_item_height: int = 0
+    # 列表滑动高度，读取流水列表滑动时需要
     _list_swipe_height: int = 0
+    # 列表项高度，用于分页滑动累加、避免显示不全，导致列表 key 不准确，多次进入详情
     _item_height: int = 0
 
     def check(self, ctx: ActivityCheckContext):
@@ -242,6 +276,13 @@ class HRBTransactionActivityExecutor(HRBActivityExecutorBase):
                and ctx.d.xpath('//*[@resource-id="form"]', ctx.source).exists
 
     def execute(self, ctx: ActivityExecuteContext, *args, **kwargs):
+        """
+        流水须知：
+        1. 默认展示7天内交易
+        2. 进入交易详情后，再返回交易列表，会重新刷新列表
+        3. 账户列表包含需要数据，无对方账号
+        4. 已处理情况：无流水时，默认一页流水，多页流水时
+        """
         self._log('进入流水页面')
         self._reset_data()  # 每次重置当前流水列表
         self._last_trans, self._max_query_count, self._start_time, _ = BotActionParameter.get_query_trans(**kwargs)
@@ -251,11 +292,13 @@ class HRBTransactionActivityExecutor(HRBActivityExecutorBase):
 
         had_next = True
         while had_next:
+            # 进入详情后，返回列表会重置到首页列表内容
             had_next, need_swipe = self._curr_list(ctx)
             self._log(f'当前流水条数: {self._distinct_list.count()}')
             if need_swipe:
                 move = self._list_swipe_height - self._last_item_height
                 self._log(f'分页滑动高度: {move} = {self._list_swipe_height} - {self._last_item_height}')
+                # 滑动需计算真实高度
                 DeviceHelper.swipe_up_until(ctx.d, ctx.win_size_height, move)
 
         trans_list = self._distinct_list.data_list()
@@ -269,13 +312,17 @@ class HRBTransactionActivityExecutor(HRBActivityExecutorBase):
 
     def _curr_list(self, ctx: ActivityExecuteContext) -> (bool, bool):
         d = ctx.d
+        # 滑动后 显示 加载中
         self._wait_loading(d)
 
+        # 等30秒保证加载完成
         x_list = d.xpath('//*[@resource-id="form"]/*').wait(30)
         if not x_list:
             raise BotParseError('未获取到流水列表')
+        # 等会儿，滑动后不稳定
         d.sleep(0.5)
 
+        # 列表已检查不到新数据时，则触发默认滑动，首次使用第一屏高度，再次累加内容项高度
         if self._list_swipe_height == 0:
             _, _, _, l_height = d.xpath('//*[@resource-id="form"]').get().rect
             self._list_swipe_height = l_height
@@ -289,12 +336,18 @@ class HRBTransactionActivityExecutor(HRBActivityExecutorBase):
                 continue
             _, _, _, item_height = item.rect
             self._last_item_height = item_height
+            # 设定第一项为列表项全显高度
             if not self._item_height:
                 self._item_height = item_height
+            # 小于列表项全显高度则忽略
             if (item_height + 20) < self._item_height:
                 continue
+            # 用于快速滑动找到未获取详情那条记录
             item_key = self._get_item_key(item_values)
+            # 列表项过滤
+            # '跨行网上支付_+3.00_02/24(周四)_余额:21.07_'
             if self._distinct_list.contains_key(item_key):
+                # self._log(f'流水明细数据已存在数据，忽略: {item_id}')
                 continue
 
             item_detail = self._get_detail(d, item)
@@ -312,12 +365,15 @@ class HRBTransactionActivityExecutor(HRBActivityExecutorBase):
                 if self._distinct_list.count() >= self._max_query_count:
                     self._log(f'符合查询流水条数限制，终止查询，条数: {self._distinct_list.count()}')
                     return False, False
+                # 避免点击详情过快
                 d.sleep(0.5)
 
+        # 已读取到列表最后时，有显示无更多数据
         if d.xpath('//*[@text="暂无结果"]', _source).exists:
             self._log('[查询流水] 暂无结果')
             return False, False
 
+        # 已读取到列表最后时，有显示无更多数据
         x_load = d.xpath('//*[@resource-id="loadEnd"]', _source)
         if x_load.exists and StrHelper.contains('暂无更多', x_load.get_text()):
             self._log('[查询流水] 没有更多数据')
@@ -330,6 +386,7 @@ class HRBTransactionActivityExecutor(HRBActivityExecutorBase):
     def _get_item_key(elements: List[u2.xpath.XMLElement]):
         if not elements:
             return ''
+        # 避免不固定文字
         return ''.join([(_s.text.replace('可退款', '') + '_') for _s in elements])
 
     def _get_detail(self, d: u2.Device, item_parent: u2.xpath.XMLElement) -> Optional[Transaction]:
@@ -343,6 +400,7 @@ class HRBTransactionActivityExecutor(HRBActivityExecutorBase):
             DeviceHelper.press_back(d)
 
     def _parse_detail(self, d: u2.Device) -> Optional[Transaction]:
+        """解析详情，兼容 收入、支出"""
 
         _source = self._dump_hierarchy(d)
         item_nodes = d.xpath('//*[@resource-id="detail"]/android.widget.ListView/*', _source).all()
@@ -351,12 +409,14 @@ class HRBTransactionActivityExecutor(HRBActivityExecutorBase):
             self._log('流水详情内容数量过小，忽略')
             return None
 
+        # 第一项固定为交易金额： [+3.00元 交易金额]
         amount_texts = XPathHelper.get_all_texts(d, item_nodes[0].get_xpath(), _source)
         amount = BotHelper.amount_fen(HRBHelper.convert_amount(amount_texts[0][0]))
         direction = 1 if amount > 0 else 0
         trans = Transaction(amount=abs(amount), direction=direction, extension={})
 
         for item in item_nodes:
+            # 配对项值为空时，不会为值节点
             item_texts = XPathHelper.get_all_texts(d, item.get_xpath(), _source)
             if len(item_texts) < 2:
                 continue
@@ -364,6 +424,7 @@ class HRBTransactionActivityExecutor(HRBActivityExecutorBase):
             _key = item_texts[0][0]
             _key_val = item_texts[1][0]
             if StrHelper.any_contains(['交易时间', '交易日期'], _key):
+                # 2022/02/24 11:41:29
                 trans.time = DateTimeHelper.to_datetime(_key_val)
             elif StrHelper.contains('余额', _key):
                 trans.balance = BotHelper.amount_fen(HRBHelper.convert_amount(_key_val))
@@ -376,10 +437,12 @@ class HRBTransactionActivityExecutor(HRBActivityExecutorBase):
             elif StrHelper.any_contains(['对方账号'], _key):
                 trans.customerAccount = HRBHelper.get_card_no(_key_val)
             elif StrHelper.any_contains(['备注'], _key):
+                # 备注信息
                 trans.postscript = _key_val
             elif StrHelper.any_contains(['对方银行名称'], _key):
                 trans.extension['对方行名'] = _key_val
             elif StrHelper.contains('交易机构', _key) or StrHelper.contains('交易金额', _key_val):
+                # 已识别内容项，忽略处理
                 pass
             else:
                 self._log(f'[流水详情] 未知项 {_key} -> {_key_val}')
@@ -397,6 +460,7 @@ class HRBTransferActivityExecutor(HRBActivityExecutorBase):
     _re_payer_amount = re.compile(r'可用余额[：:￥]*([\d\\.,]+)')
 
     def check(self, ctx: ActivityCheckContext):
+        # 转账填写页面 OR 转账认证页面
         return HRBHelper.is_eq_title(ctx.d, ctx.source, '智能转账') \
                and ctx.d.xpath('//*[@resource-id="PAY_AMT" or @resource-id="next"]', ctx.source).exists
 
@@ -421,9 +485,11 @@ class HRBTransferActivityExecutor(HRBActivityExecutorBase):
         kb.check(self._transferee.account)
         kb.close()
 
+        # 检查收款银行，自动带出、手动选择
         self._log(f'等待自动选择银行')
         payee_bank = self._exec_retry('等待自动选择银行', 30, lambda: self._get_choose_bank(d, bank_xpath))
         payee_bank = payee_bank or ''
+        # 如果收款银行非必须字段，需要判断是否有自动选择即可
         check_bank_name = True  # 收款信息中无收款银行时，不做校验银行名称
         if self._transferee.bank_name:
             bank_name = self._transferee.bank_name
@@ -435,10 +501,12 @@ class HRBTransferActivityExecutor(HRBActivityExecutorBase):
 
         self._log(f'输入转账金额')
         self._input_amount(ctx)
+        # 等待金额输完后的节点渲染
         self._wait_loading(d)
 
         if self._transferee.postscript:
             self._log(f'输入附言: {self._transferee.postscript}')
+            # 使用非fastinput输入时，元素可能会被遮挡
             DeviceHelper.set_text(d, postscript_xpath, self._transferee.postscript, swipe_up=0.5, close_kb=True)
 
         self._log(f'点击转账')
@@ -455,8 +523,10 @@ class HRBTransferActivityExecutor(HRBActivityExecutorBase):
 
         self._log(f'等待短信验证码')
         sms_code = BotHelper.get_sms_code(sms_code_func=self._sms_code_func)
+        # 短信验证码，等待顶部短信通知关闭
         d.sleep(6)
         self._log(f'输入短信验证码')
+        # 6个分开的文本框，需单个字符键入
         DeviceHelper.set_text(d, sms_code_node, sms_code, single_input=True)
         self._wait_loading(d)
         d.sleep(2)
@@ -471,14 +541,18 @@ class HRBTransferActivityExecutor(HRBActivityExecutorBase):
             self._log(f'检查转账结果')
             self._exec_retry('检查转账结果', 60, lambda: self._transfer_result_check(d))
         except BotTransferFailedError as err:
+            # 识别到的转账失败异常
             self._log(f'检查转账结果失败: {err.msg}')
             return False, f'转账失败，{err.msg}'
         except Exception as ex:
+            # 未识别异常，乐观处理
             self._log(f'检查转账结果未知异常: {repr(ex)}')
+            # 回退，避免恶意操作
             self._tooltip_back(d)
             if settings.debug:
                 self._save_screenshot_transfer(d, f'{self._transferee.holder}_转账成功_待确认')
             return True, '转账成功，需确认'
+        # 未检测到失败，则认为成功
         return True, '转账成功'
 
     def _input_amount(self, ctx: ActivityExecuteContext):
@@ -487,6 +561,7 @@ class HRBTransferActivityExecutor(HRBActivityExecutorBase):
         usable_xpath = '//*[contains(@text,"可用余额")]'
         amount_xpath = '//*[@resource-id="PAY_AMT"]'
 
+        # 检查付款账号、可用余额
         payer_text = d.xpath(payer_card_xpath).get_text()
         payer_card_match = self._re_payer_card.search(payer_text)
         if not payer_card_match:
@@ -508,8 +583,10 @@ class HRBTransferActivityExecutor(HRBActivityExecutorBase):
             self._log(f'取消转账: {msg}')
             raise BotCategoryError(ErrorCategory.BankWarning, msg)
 
+        # 输入转账金额
         self._log(f'输入转账金额')
         while True:
+            # 每次点击转账金额，都会重新输入
             d.xpath(amount_xpath).click()
             d.sleep(0.5)
             kb = HRBNumberKeyboard(d)
@@ -525,8 +602,10 @@ class HRBTransferActivityExecutor(HRBActivityExecutorBase):
                 self._log(f'转账金额输入不正确: {payee_amt}，重新输入')
 
     def _get_choose_bank(self, d: u2.Device, item_xpath: str):
+        # 检查错误
         _source = self._dump_hierarchy(d)
         x_item = d.xpath(item_xpath, _source)
+        # 未选择时为 【请选择】
         bank_text = x_item.get_text() if x_item.exists else None
         if bank_text and not StrHelper.contains('请选择', bank_text):
             return bank_text
@@ -534,6 +613,7 @@ class HRBTransferActivityExecutor(HRBActivityExecutorBase):
 
     def _get_sms_code_node(self, d: u2.Device):
         _source = self._dump_hierarchy(d)
+        # 输入验证码的第一个文本框
         get_sms_node = d.xpath('//*[@resource-id="com.yitong.hrb.people.android:id/verificationcodeview"]'
                                '//android.widget.EditText[1]', _source)
         return get_sms_node.get() if get_sms_node.exists else None
@@ -557,6 +637,8 @@ class HRBTransferActivityExecutor(HRBActivityExecutorBase):
         self._log('结束输入 交易密码')
 
     def _transfer_result_check(self, d: u2.Device):
+        """转账后返回上页处理"""
+        # 检查错误和成功结果
         _source = self._dump_hierarchy(d)
         if HRBTransferResultActivityExecutor.is_current(d, _source):
             try:
@@ -564,14 +646,18 @@ class HRBTransferActivityExecutor(HRBActivityExecutorBase):
                     _, error_detail = HRBTransferResultActivityExecutor.get_error_detail(d, _source)
                     raise BotTransferFailedError(error_detail)
                 if HRBTransferResultActivityExecutor.is_trans_processing(d, _source):
+                    # 处理中时，无法生成回单记录
                     return True
                 if HRBTransferResultActivityExecutor.is_trans_success(d, _source):
+                    # 设置当前回单信息
                     HRBReceiptDetailActivityExecutor.last_receipt = self._get_receipt(d)
                     return True
             finally:
                 if settings.debug:
                     self._save_screenshot_transfer(d, f'{self._transferee.holder}_转账成功')
+                # 点击完成，返回到App首页
                 HRBTransferResultActivityExecutor.go_back_core(d, _source)
+        # 未检查到结果，重试
         return False
 
     def _get_receipt(self, d: u2.Device):
@@ -619,6 +705,7 @@ class HRBTransferVerifyActivityExecutor(HRBActivityExecutorBase):
 
     @staticmethod
     def go_back_core(d: u2.Device, source=None):
+        # 关闭
         x_btn_back = d.xpath('//*[@resource-id="com.bankcomm.Bankcomm:id/btnAuthTopTitleBack"]', source)
         if x_btn_back.exists:
             x_btn_back.click()
@@ -642,6 +729,7 @@ class HRBTransferResultActivityExecutor(HRBActivityExecutorBase):
 
     @staticmethod
     def is_current(d: u2.Device, source=None):
+        # 智能转账
         return (HRBHelper.any_title(d, source, ['转账失败', '转账成功', '智能转账'])
                 and (HRBTransferResultActivityExecutor.is_trans_success(d, source)
                      or HRBTransferResultActivityExecutor.is_trans_failed(d, source)
@@ -662,6 +750,7 @@ class HRBTransferResultActivityExecutor(HRBActivityExecutorBase):
     @staticmethod
     def is_trans_failed(d: u2.Device, source=None):
         result_msg, detail_msg = HRBTransferResultActivityExecutor.get_error_detail(d, source)
+        # 交易密码错误，直接停止运行，避免锁卡
         if StrHelper.any_contains(['短信口令错误', '密码错误'], detail_msg):
             raise BotTransferFailedError(detail_msg, is_stop=True)
         return d.xpath('//*[contains(@text,"转账失败")]', source).exists
@@ -670,12 +759,19 @@ class HRBTransferResultActivityExecutor(HRBActivityExecutorBase):
     def get_error_detail(d: u2.Device, source=None):
         x_result_msg = d.xpath('//*[@resource-id="resultMsg"]', source)
         x_detail = d.xpath('//*[@resource-id="errorMsg"]', source)
+        # 转账失败
+        # 转账成功
+        # 等待处理
         result_msg = x_result_msg.get_text() if x_result_msg.exists else ''
+        # 短信口令错误
+        # 密码错误! 已输错1次!
+        # 查询结果出现异常，为避免重复转账请先前往转账查询中查询扣款情况
         error_detail = x_detail.get_text() if x_detail.exists else ''
         return result_msg, error_detail
 
     @staticmethod
     def go_back_core(d: u2.Device, source=None):
+        # 完成，返回 App 首页
         x_done = d.xpath('//*[@resource-id="finish"]', source)
         if x_done.exists:
             x_done.click()
@@ -684,4 +780,5 @@ class HRBTransferResultActivityExecutor(HRBActivityExecutorBase):
 
 
 class HRBReceiptDetailActivityExecutor:
+    # 回单结果，转账后会先设置此处，下次查找回单时直接上报
     last_receipt: Receipt = None

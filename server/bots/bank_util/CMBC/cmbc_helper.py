@@ -6,6 +6,8 @@ __all__ = ['CMBCActivityWebView', 'CMBCHelper']
 class CMBCActivityWebView:
     @staticmethod
     def get_title(d: u2.Device, source=None) -> [bool, str]:
+        # .activity.WebViewActivity
+        # cn.com.cmbc.newmbank.activity.WebViewActivity
         x_title = d.xpath('//*[@resource-id="cn.com.cmbc.newmbank:id/tv_title"]', source)
         if x_title.exists:
             ele_title = x_title.get()

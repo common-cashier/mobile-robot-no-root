@@ -16,6 +16,7 @@ class KeyboardType(enum.IntEnum):
 
 
 class PSBCNumberKeyboard:
+    """数字键盘处理(手机号、验证码等)"""
 
     def __init__(self, d: u2.Device, source: str = None):
         x_keyboard = d.xpath('//*[@resource-id="com.yitong.mbank.psbc:id/llayout_keyboard_panel"]', source)
@@ -50,6 +51,7 @@ class PSBCNumberKeyboard:
 
 
 class PSBCFullPwdKeyboard:
+    """全字符密码键盘处理：登录密码、交易密码"""
 
     def __init__(self, d: u2.Device, kb_xpath: str, source: str = None):
         keyboard = d.xpath(kb_xpath, source)
@@ -59,6 +61,7 @@ class PSBCFullPwdKeyboard:
         self._d = d
         self._source = d.dump_hierarchy() if source is None else source
         self._keyboard_xpath = keyboard.get().get_xpath()
+        # 打开键盘时会还原之前状态
         self._current_type = self._recognize()
 
     def _recognize(self):
@@ -76,6 +79,7 @@ class PSBCFullPwdKeyboard:
         raise BotRunningError('未识别到键盘类型，不支持特殊字符')
 
     def _xpath_child(self, _xpath, use_source=False):
+        # 输入字符时，切换大小写或数字时，切换可能会有延迟，固不采用缓存
         _source = self._source if use_source else None
         return self._d.xpath(self._keyboard_xpath, _source).child(_xpath)
 
@@ -85,18 +89,23 @@ class PSBCFullPwdKeyboard:
         while self._current_type & target_type != target_type:
             switched_type: Optional[KeyboardType] = None  # None is not switch
 
+            # 字母切换为数字
             if target_type & KeyboardType.DIGIT and (
                     self._current_type & KeyboardType.LETTER_LOWER or self._current_type & KeyboardType.LETTER_UPPER):
                 self._xpath_child('//*[@resource-id="com.yitong.mbank.psbc:id/btnAbcBoardChangeNumber"]').click()
                 switched_type = KeyboardType.DIGIT
+            # 字母切换大小写
             elif (target_type & KeyboardType.LETTER_LOWER or target_type & KeyboardType.LETTER_UPPER) and (
                     self._current_type & KeyboardType.LETTER_LOWER or self._current_type & KeyboardType.LETTER_UPPER):
                 self._xpath_child('//*[@resource-id="com.yitong.mbank.psbc:id/btnAbcBoardUpperLowSwitch"]').click()
+                # 删除当前字母类型，变为另一类字母类型
                 letter_del = (KeyboardType.LETTER_LOWER | KeyboardType.LETTER_UPPER) ^ target_type
                 switched_type = (self._current_type | target_type) ^ letter_del
+            # 数字切换为字母，最后执行，保证字母和数字会同时显示
             elif self._current_type & KeyboardType.DIGIT and (
                     target_type == KeyboardType.LETTER_LOWER or target_type == KeyboardType.LETTER_UPPER):
                 self._xpath_child('//*[@resource-id="com.yitong.mbank.psbc:id/btnNumBoardChangeAbc"]').click()
+                # 还原字母时的状态，会自动切换为小写
                 switched_type = KeyboardType.LETTER_LOWER
                 pass
 

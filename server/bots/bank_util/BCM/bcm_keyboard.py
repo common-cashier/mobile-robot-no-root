@@ -17,6 +17,7 @@ class KeyboardType(enum.IntEnum):
 
 
 class BCMLoginPwdKeyboard:
+    """登录密码键盘处理"""
 
     _d: u2.Device
     _current_type: KeyboardType
@@ -42,6 +43,8 @@ class BCMLoginPwdKeyboard:
 
     def _sleep_when_switch(self, seconds=None):
         pass  # 不需要等待，响应很快
+        # seconds = 0.01 if seconds is None else seconds
+        # self._d.sleep(seconds)
 
     def _switch_keyboard_type(self, target_type: KeyboardType):
         if self._current_type & target_type == target_type:
@@ -49,17 +52,26 @@ class BCMLoginPwdKeyboard:
         while self._current_type & target_type != target_type:
             switched_type: Optional[KeyboardType] = None  # None is not switch
 
+            # 字母切换为数字
             if target_type & KeyboardType.DIGIT and (
                     self._current_type & KeyboardType.LETTER_LOWER or self._current_type & KeyboardType.LETTER_UPPER):
                 self._xpath_child('//*[contains(@resource-id,"com.bankcomm.Bankcomm:id/keyNumberic")]').click()
                 switched_type = self._current_type | KeyboardType.DIGIT
+            # 字母切换大小写
             elif (target_type & KeyboardType.LETTER_LOWER or target_type & KeyboardType.LETTER_UPPER) and (
                     self._current_type & KeyboardType.LETTER_LOWER or self._current_type & KeyboardType.LETTER_UPPER):
                 self._xpath_child('//*[contains(@resource-id,"com.bankcomm.Bankcomm:id/keycap1")]').click()
+                # 删除当前字母类型，变为另一类字母类型
                 letter_del = (KeyboardType.LETTER_LOWER | KeyboardType.LETTER_UPPER) ^ target_type
                 switched_type = (self._current_type | target_type) ^ letter_del
+            # 数字切换为字母，最后执行，保证字母和数字会同时显示
             elif self._current_type & KeyboardType.DIGIT and (
                     target_type == KeyboardType.LETTER_LOWER or target_type == KeyboardType.LETTER_UPPER):
+                # # 切换字母时，会自动还原为之前字母类型
+                # self._xpath_child(
+                #     '//*[contains(@resource-id,"com.bankcomm.Bankcomm:id/btn_numberic_key_back")]').click()
+                # # 还原字母时的状态
+                # switched_type = self._current_type ^ KeyboardType.DIGIT  # ^ KeyboardType.LETTER_UPPER
                 pass
 
             if switched_type is not None:
@@ -92,6 +104,7 @@ class BCMLoginPwdKeyboard:
 
 
 class BCMTransferPwdKeyboard:
+    """转账 交易密码 键盘处理"""
 
     _d: u2.Device
     _source: str
@@ -107,6 +120,7 @@ class BCMTransferPwdKeyboard:
 
         _kb_node = x_keyboard.get()
         self._keyboard_xpath = _kb_node.get_xpath()
+        # 键盘横向顺序字符对应的节点
         pos_xpath = [
             '//*[@resource-id="com.bankcomm.Bankcomm:id/btnPwdDigit0"]',
             '//*[@resource-id="com.bankcomm.Bankcomm:id/btnPwdDigit3"]',
@@ -125,6 +139,7 @@ class BCMTransferPwdKeyboard:
             recognize = RecognizeNumber(_image, x, y, w, h, num_len)
             pos_nums = recognize.image_str()[:num_len]
             self._num_xpath = dict([(pos_nums[_i], pos_xpath[_i]) for _i in range(len(pos_nums))])
+            # todo:martin dev 识别错误问题？
             if len(self._num_xpath) != num_len:
                 raise BotParseError(f'交易密码识别结果不匹配: {pos_nums}')
 

@@ -34,11 +34,13 @@ class BotActionParameter:
 
     @staticmethod
     def get_account(**kwargs):
+        """获取查询账户余额参数"""
         account: Account = kwargs.get('account')
         return account
 
     @staticmethod
     def get_query_trans(**kwargs):
+        """获取查询流水参数"""
         last_trans: Transaction = kwargs.get('last_trans')
         max_count: int = kwargs.get('max_query_count', 30)  # 默认查询 30 条
 
@@ -52,12 +54,16 @@ class BotActionParameter:
 
     @staticmethod
     def get_transfer(**kwargs):
+        """获取转账参数"""
         transferee: Transferee = kwargs.get('transferee')
         sms_code_func: Callable = kwargs.get('sms_code_func')
         return transferee, sms_code_func
 
     @staticmethod
     def get_query_receipt(**kwargs):
+        """获取查询回单参数"""
+        # last_receipt: Receipt = kwargs.get('last_receipt')
+        # 最后一次转账信息，目前只抓取转账匹配的1条回单
         last_transferee: Transferee = kwargs.get('last_transferee')
         max_count: int = kwargs.get('max_query_count', 3)  # 默认查询 3 条
         return last_transferee, max_count

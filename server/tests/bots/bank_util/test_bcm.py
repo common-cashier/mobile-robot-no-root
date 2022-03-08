@@ -4,6 +4,7 @@ import unittest
 
 import uiautomator2 as u2
 
+# use root
 os.chdir('../../')
 
 from server.bots.act_scheduler.bot_exceptions import BotErrorBase, BotCategoryError

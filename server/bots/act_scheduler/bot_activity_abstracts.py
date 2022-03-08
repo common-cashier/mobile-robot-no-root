@@ -18,9 +18,11 @@ __all__ = ['BotActivityType', 'ActivityContext', 'ActivityCheckContext', 'Activi
 
 @enum.unique
 class BotActivityType(Enum):
+    # 用于未知活动类型时，回退到上页继续查找
     Default = auto()
     Startup = auto()
     Guide = auto()
+    # 用于过渡页面使用
     Transition = auto()
     Main = auto()
     Login = auto()
@@ -86,6 +88,7 @@ class ActivityContext:
         self._curr_activity = value
 
     def reset(self, source: str = None, current_activity: str = None):
+        """重置 或 重新加载 页面结构"""
         self.source = source
         self.current_activity = current_activity
 
@@ -104,12 +107,14 @@ class ActivityExecuteContext(ActivityContext):
 
 
 class BotActivityConfig:
+    """执行 Activity 配置"""
 
     def __init__(self, proxy: BotDeviceProxy = None):
         self.d_proxy = proxy
 
 
 class BotActivityExecutor:
+    """银行 Activity 执行类"""
 
     def __init__(self, name: str, activity_type: BotActivityType, act_config: BotActivityConfig = None):
         self.name = name
@@ -120,6 +125,9 @@ class BotActivityExecutor:
                     , func: Callable[[], Any]
                     , interval_second: float = 1
                     , with_error=False) -> Any:
+        """执行重试
+        :return: None or 函数结果值
+        """
         while retry_limit > 0:
             func_result = func()
             if func_result:
@@ -133,12 +141,16 @@ class BotActivityExecutor:
         return None
 
     def _log(self, msg, level: Level = None, hide: bool = False):
+        """记录日志"""
         full_msg = f'[{self.__class__.__name__}] - {msg}'
         if level is None:
             level = Level.APP
         common_log(full_msg, level, hide)
 
     def _dump_hierarchy(self, d: u2.Device, check_error=True):
+        """加载结构，使用代理类检查页面是否有错误
+        :param check_error: 是否检查错误，仅配置 act_config 代理时有效
+        """
 
         if self.act_config and self.act_config.d_proxy is not None:
             return self.act_config.d_proxy.dump_hierarchy(d, check_error=check_error)
@@ -160,14 +172,20 @@ class BotActivityExecutor:
         d.screenshot(file_name)
 
     def check(self, ctx: ActivityCheckContext):
+        """检查是否符合当前Activity，尽可能检测精准，避免loading或多页面重复内容"""
         pass
 
     def execute(self, ctx: ActivityExecuteContext, *args, **kwargs):
+        """执行当前Activity，功能操作中的流程最后步骤需要返回相关数据"""
         pass
 
     def go_next(self, ctx: ActivityExecuteContext, target_type: BotActivityType):
+        """跳转到下个ActivityType，用于多个Activity间有依赖时触发
+        1. 优先使用 click_exists 点击，避免页面有提示框时导致异常
+        """
         pass
 
     def go_back(self, ctx: ActivityExecuteContext, target_type: BotActivityType):
+        """跳转到上个ActivityType，用于多个Activity间有依赖时触发，或回退到主页"""
         ctx.d.press('back')  # default is back
         self._log('触发页面默认返回')
