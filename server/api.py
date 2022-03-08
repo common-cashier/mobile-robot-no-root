@@ -1,13 +1,13 @@
-from settings import api, Status
-import misc
+from server import misc
+from server.settings import api
 
 
 def start(account_alias, devices_id=''):
     return post(api['start'], {'accountAlias': account_alias, 'devicesId': devices_id})
 
 
-def status(account_alias, state):
-    return post(api['status'], {'accountAlias': account_alias, 'status': state.value})
+def status(account_alias, state, msg=''):
+    return post(api['status'], {'accountAlias': account_alias, 'status': state.value, 'msg': msg})
 
 
 def last_transaction(account_alias):
@@ -22,8 +22,9 @@ def transaction(account_alias, balance, transactions):
     return post(api['transaction'], {'accountAlias': account_alias, 'balance': balance, 'transactions': transactions})
 
 
-def transfer_result(order_id, order_status, msg=''):
-    return post(api['transfer_result'], {'orderId': order_id, 'status': order_status, 'msg': msg})
+def transfer_result(account_alias, order_id, order_status, msg=''):
+    return post(api['transfer_result'],
+                {'accountAlias': account_alias, 'orderId': order_id, 'status': order_status, 'msg': msg})
 
 
 def receipt(account_alias, receipts):

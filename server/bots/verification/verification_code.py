@@ -1,11 +1,12 @@
 import re  # 用于正则
+import time
+
 from PIL import Image  # 用于打开图片和对图片处理
 import pytesseract  # 用于图片转文字
-import time
+
+from server.ocr_api import ocr_img
+
 Image.LOAD_TRUNCATED_IMAGES = True
-import sys
-sys.path.append('../..')
-from ocr_api import ocr_img
 
 
 class VerificationCode:

@@ -1,17 +1,17 @@
 import json
 import base64
-import os
 import re
+import ssl
 
 from tencentcloud.common import credential
 from tencentcloud.common.profile.client_profile import ClientProfile
 from tencentcloud.common.profile.http_profile import HttpProfile
 from tencentcloud.common.exception.tencent_cloud_sdk_exception import TencentCloudSDKException
 from tencentcloud.ocr.v20181119 import ocr_client, models
-import ssl
-from settings import log, Level
-import settings
-from sls_quick_start import third_party_api
+
+from server import settings
+from server.settings import log, Level
+from server.sls_quick_start import third_party_api
 
 ssl._create_default_https_context = ssl._create_unverified_context
 

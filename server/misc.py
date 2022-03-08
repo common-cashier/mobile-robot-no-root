@@ -8,19 +8,21 @@ import requests
 import logging as logger
 
 from aes import encrypt, decrypt
-from settings import api, log, sms_bank, Level, serial_no
+from server import settings
+from server.settings import api, log, sms_bank, Level
 
 
 def get(url):
     logger.info("req %s", url)
     begin = t.time()
     rsp = requests.get(url)
-    log("rsp from %s, status=%s, text=%s, cost %s seconds" % (url, rsp.status_code, rsp.text, t.time() - begin), Level.RES_WATER_DROP)
+    log("rsp from %s, status=%s, text=%s, cost %s seconds" % (url, rsp.status_code, rsp.text, t.time() - begin),
+        Level.RES_WATER_DROP)
     return rsp.ok and rsp.json() or None
 
 
 def post(url, payload, with_common=False):
-    payload.update({"serialNo": "".join(serial_no)})
+    payload.update({"serialNo": "".join(settings.serial_no)})
     if with_common:
         payload.update(common_data())
     log("req %s, params=%s" % (url, payload), Level.REQ_WATER_DROP)
@@ -28,7 +30,8 @@ def post(url, payload, with_common=False):
     params = encrypt_data(payload)
     log("encrypt_data: %s" % params, Level.REQ_WATER_DROP)
     rsp = requests.post(url, json=params)
-    log("rsp from %s, status=%s, text=%s, cost %s seconds" % (url, rsp.status_code, rsp.text, t.time() - begin), Level.RES_WATER_DROP)
+    log("rsp from %s, status=%s, text=%s, cost %s seconds" % (url, rsp.status_code, rsp.text, t.time() - begin),
+        Level.RES_WATER_DROP)
     if rsp:
         rsp = decrypt(rsp, api["key"], api["iv"])
     log("rsp from %s, text=%s, cost %s seconds" % (url, rsp, t.time() - begin), Level.RES_WATER_DROP)
@@ -48,7 +51,9 @@ def parse_sms(sms_msg, bank):
         if '交易码' in sms_msg:
             return re.findall(r'交易码(\d{6})', sms_msg)[0]
         elif '验证码' in sms_msg:
-            return re.findall(r'验证码(\d{6})', sms_msg)[0]
+            return re.findall(r'验证码[：:]?(\d{6})', sms_msg)[0]
+        elif '短信密码' in sms_msg:
+            return re.findall(r'短信密码[：:]?(\d{6})', sms_msg)[0]
         else:
             return 1
     else:
@@ -57,8 +62,7 @@ def parse_sms(sms_msg, bank):
 
 if __name__ == "__main__":
     rsp = post("https://uatbotapi.drippay.net/pc/transfer",
-         {'accountAlias': '中国银行-LTT(李婷婷)-1535'})
+               {'accountAlias': '中国银行-LTT(李婷婷)-1535'})
     print(rsp['data'])
     print(type(rsp['data']))
     print(rsp['data'] is None)
-

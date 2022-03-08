@@ -1,5 +1,6 @@
-adbutils==0.8.2
+adbutils==0.13.1
 apkutils2==1.0.0
+aliyun-log-python-sdk==0.6.56
 appdirs==1.4.4
 asgiref==3.3.4
 blinker==1.4
@@ -56,8 +57,9 @@ ruamel.yaml==0.16.13
 ruamel.yaml.clib==0.2.2
 six==1.15.0
 sortedcontainers==2.3.0
+tencentcloud-sdk-python==3.0.464
 tornado==6.1
-uiautomator2==2.12.0
+uiautomator2==2.16.13
 urllib3==1.26.1
 urwid==2.1.2
 virtualenv==20.3.0

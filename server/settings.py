@@ -4,25 +4,25 @@ import hashlib
 import json
 import os
 import socket
-from enum import Enum
 import logging
+from enum import Enum
+from typing import Optional
 
 import requests
 from flask import request
 
-from sls_quick_start import put_logs
-from models import Receipt
+from server.sls_quick_start import put_logs
+from server.models import Receipt, Bot, Transferee
 
 debug = False
-bot = None
+bot: Optional[Bot] = None
 post_sms_already = False
 pc_url = ""
 presser = {}
 count = 0
-account_data = ""
 last_sms = ""
 order_exists = False
-transferee = ""
+transferee: Optional[Transferee] = None
 log_msg = ""
 need_receipt_no = False
 need_receipt = False
@@ -38,6 +38,8 @@ got_transaction = []
 temp_transaction = []
 middle_break = False
 md5_json = {}
+start_kind: int = 0
+need_sms = False
 
 with open('../device_id.txt') as fd:
     serial_no = fd.readline().strip()
@@ -61,7 +63,7 @@ bank_map = {
     'BOCSH': '中国银行',
     'BCM': '交通银行',
     'CMB': '招商银行',
-    'MSB': '中国民生银行',
+    'CMBC': '中国民生银行',
     'CITTIC': '中信银行',
     'SHPDB': '上海浦东发展银行',
     'PAB': '平安银行（原深圳发展银行）',
@@ -73,13 +75,17 @@ bank_map = {
     'BOS': '上海银行',
     'JSBK': '江苏银行股份有限公司',
 }
+
 sms_bank = {
     'CCB': r'\[建设银行]$',
     'ABC': r'^【中国农业银行】',
     'ICBC': r'【工商银行】$',
     'GXRCU': r'^【广西农信】',
     'XXC': r'\[兴业银行]$',
-    'BOC': r'【中国银行】$'
+    'BOC': r'【中国银行】$',
+    'CMBC': r'民生银行',
+    'BCM': r'【交通银行】$',
+    'PSBC': r'^【邮储银行】',
 }
 
 api = {
@@ -104,12 +110,18 @@ rename_bank = {
 
 payment_bank = [
     'BOC',
-    'CCB'
+    'CCB',
+    'CMBC',
+    'BCM',
+    'PSBC',
 ]
 
 receive_bank = [
     'BOC',
-    'CCB'
+    'CCB',
+    'CMBC',
+    'BCM',
+    'PSBC',
 ]
 
 
@@ -179,7 +191,7 @@ def log(msg, kind=Level.APP, hide=False):
     level_arr = ['App调用', '系统出错', '请求水滴服务器', '水滴服务器返回值', '外部Api', '收款凭证', '付款凭证', '回单', '金额确认', 'x_log', 'XXX']
     put_logs(serial_no, msg, level_arr[kind.value])
     if hide is not True:
-        msg = "类型：%s - 内容：%s - 时间：%s" % (level_arr[kind.value], msg, datetime.datetime.now())
+        msg = "[%s] [类型:%s] - 内容：%s" % (datetime.datetime.now(), level_arr[kind.value], msg)
         logger.warning(msg)
 
 
